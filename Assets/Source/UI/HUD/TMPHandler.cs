@@ -2,12 +2,12 @@
 
 public class TMPHandler : MonoBehaviour {
     private TMPro.TextMeshProUGUI textMeshProUGUI;
-    private SignalEvent trigger;
+    private StateEvent<bool> trigger;
     private string text = "";
 
     private void OnEnable() {
         textMeshProUGUI = GetComponent<TMPro.TextMeshProUGUI>();
-        trigger = SignalEvent.Get("PANEL");
+        trigger = StateEvent<bool>.Get("PANEL");
         if (trigger != null) {
             trigger += onTrigger;
         }
@@ -25,8 +25,9 @@ public class TMPHandler : MonoBehaviour {
         }
     }
 
-    private void onTrigger() {
-        if (text == "") {
+    private void onTrigger(bool state) {
+        Debug.Log("PANEL: updating TMP text");
+        if (state) {
             text = "PANEL ON";
         }
         else {

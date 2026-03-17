@@ -5,14 +5,8 @@ using UnityEngine.Events;
 public class StateEvent<T> : ScriptableObject {
     private event UnityAction<T> OnEventRaised;
     [SerializeField]
-    private T defaultValue;
     private T _state;
     private static Dictionary<string, StateEvent<T>> events = new Dictionary<string, StateEvent<T>>();
-
-    // TODO: Validate effectiveness of approach
-    public void OnAfterDeserialize() {
-        _state = defaultValue;
-    }
 
     private void OnEnable() {
         if (!events.ContainsKey(this.name)) {
@@ -26,7 +20,7 @@ public class StateEvent<T> : ScriptableObject {
     }
     
     public void Raise(T value) {
-        if (!this._state.Equals(value)) {
+        if (!EqualityComparer<T>.Default.Equals(this._state, value)) {
             this._state = value;
             OnEventRaised?.Invoke(value);
         }
