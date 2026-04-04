@@ -1,0 +1,137 @@
+{
+  "Environmental": {
+    "min": 0.0,
+    "max": 86.167,
+    "mean": 18.714
+  },
+  "Social": {
+    "min": 2.57,
+    "max": 68.622,
+    "mean": 20.492
+  },
+  "Governance": {
+    "min": 48.314,
+    "max": 100.0,
+    "mean": 86.009
+  },
+  "ESG_score": {
+    "min": 21.577,
+    "max": 82.014,
+    "mean": 41.794
+  },
+  "Current Assets": {
+    "min": 8.659,
+    "max": 181915.0,
+    "mean": 4023.036
+  },
+  "Assets": {
+    "min": 28.277,
+    "max": 551669.0,
+    "mean": 13367.872
+  },
+  "Cash": {
+    "min": 0.0,
+    "max": 48844.0,
+    "mean": 1050.939
+  },
+  "Current Marketable Securities": {
+    "min": 0.0,
+    "max": 122951.0,
+    "mean": 532.892
+  },
+  "Current Liabilities": {
+    "min": 2.283,
+    "max": 126385.0,
+    "mean": 2906.616
+  },
+  "Liabilities": {
+    "min": 5.72,
+    "max": 349735.0,
+    "mean": 8989.076
+  },
+  "Property, Plant and Equipment": {
+    "min": 0.352,
+    "max": 259651.0,
+    "mean": 4086.938
+  },
+  "Preferred/Preference Stock": {
+    "min": -218.0,
+    "max": 9762.0,
+    "mean": 24.699
+  },
+  "Allowance for Doubtful Receivables": {
+    "min": 0.0,
+    "max": 6953.0,
+    "mean": 28.771
+  },
+  "Total Receivables": {
+    "min": 0.0,
+    "max": 63139.0,
+    "mean": 1217.796
+  },
+  "Stockholders Equity": {
+    "min": -18316.0,
+    "max": 222544.0,
+    "mean": 4215.815
+  },
+  "Cost of Goods Sold": {
+    "min": 0.525,
+    "max": 225798.0,
+    "mean": 6196.456
+  },
+  "Dividends - Preferred/Preference": {
+    "min": 0.0,
+    "max": 844.0,
+    "mean": 2.669
+  },
+  "Dividends": {
+    "min": 0.0,
+    "max": 15483.0,
+    "mean": 337.205
+  },
+  "Earnings Before Interest and Taxes": {
+    "min": -28387.0,
+    "max": 66288.0,
+    "mean": 980.267
+  },
+  "Earnings Per Share (Basic)": {
+    "min": -184.6,
+    "max": 131.64,
+    "mean": 1.664
+  },
+  "Net Income (Loss)": {
+    "min": -22440.0,
+    "max": 57411.0,
+    "mean": 545.77
+  },
+  "Net Income Adjusted for common stocks": {
+    "min": -22440.0,
+    "max": 57411.0,
+    "mean": 542.328
+  },
+  "Sales/Turnover (Net)": {
+    "min": 0.377,
+    "max": 386064.0,
+    "mean": 9408.899
+  },
+  "Interest and Related Expense": {
+    "min": 0.001,
+    "max": 8622.0,
+    "mean": 176.947
+  },
+  "Common Shares Outstanding": {
+    "min": 0.621,
+    "max": 16976.763,
+    "mean": 243.733
+  },
+  "Price Close - Annual -": {
+    "min": 0.009,
+    "max": 3256.93,
+    "mean": 75.09
+  },
+  "Net receivables": {
+    "min": -14.82,
+    "max": 62560.0,
+    "mean": 1189.025
+  }
+}
