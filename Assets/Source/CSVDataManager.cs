@@ -6,13 +6,7 @@ using UnityEngine;
 
 public class CSVDataManager : MonoBehaviour
 {
-    #region Singleton
-
     public static CSVDataManager Instance { get; private set; }
-
-    #endregion
-
-    #region Data Structures
 
     public struct DataRow
     {
@@ -26,16 +20,7 @@ public class CSVDataManager : MonoBehaviour
         public float[] NumericValues;
     }
 
-    #endregion
-
-    #region Inspector Fields
-
-    [Header("CSV Settings")]
     public string csvFileName = "Case_Study_Data.csv";
-
-    #endregion
-
-    #region Public Properties
 
     public List<DataRow> AllRows => _allRows;
     public List<DataRow> FilteredRows => _filteredRows;
@@ -48,16 +33,8 @@ public class CSVDataManager : MonoBehaviour
     public HashSet<string> ActiveCountries => _activeCountries;
     public bool IsLoaded => _isLoaded;
 
-    #endregion
-
-    #region Events
-
     public event Action OnDataLoaded;
     public event Action OnFilterChanged;
-
-    #endregion
-
-    #region Private Fields
 
     private List<DataRow> _allRows = new List<DataRow>(2048);
     private List<DataRow> _filteredRows = new List<DataRow>(2048);
@@ -69,6 +46,7 @@ public class CSVDataManager : MonoBehaviour
     private HashSet<string> _activeIndustries = new HashSet<string>();
     private HashSet<string> _activeYears = new HashSet<string>();
     private HashSet<string> _activeCountries = new HashSet<string>();
+    private HashSet<int> _activeColumns = new HashSet<int>();
 
     private List<string> _allIndustries = new List<string>();
     private List<string> _allYears = new List<string>();
@@ -91,10 +69,6 @@ public class CSVDataManager : MonoBehaviour
         "CIK Number", "Country Code"
     };
 
-    #endregion
-
-    #region Lifecycle
-
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -110,10 +84,6 @@ public class CSVDataManager : MonoBehaviour
     {
         StartCoroutine(LoadCSVCoroutine());
     }
-
-    #endregion
-
-    #region CSV Parsing
 
     private System.Collections.IEnumerator LoadCSVCoroutine()
     {
@@ -156,6 +126,9 @@ public class CSVDataManager : MonoBehaviour
             _headerIndex[headers[i].Trim()] = i;
 
         IdentifyNumericColumns(headers);
+
+        for (int i = 0; i < _numericColumnNames.Count; i++)
+            _activeColumns.Add(i);
 
         for (int i = 1; i < lines.Length; i++)
         {
@@ -282,10 +255,6 @@ public class CSVDataManager : MonoBehaviour
         return "Unknown";
     }
 
-    #endregion
-
-    #region Batch Updates
-
     public void BeginBatchUpdate()
     {
         _suppressFilterEvents = true;
@@ -298,9 +267,34 @@ public class CSVDataManager : MonoBehaviour
         OnFilterChanged?.Invoke();
     }
 
-    #endregion
+    public void SetColumnActive(int colIndex, bool active)
+    {
+        if (active) _activeColumns.Add(colIndex);
+        else _activeColumns.Remove(colIndex);
 
-    #region Industry Filtering
+        if (_suppressFilterEvents) return;
+        RebuildFilter();
+        OnFilterChanged?.Invoke();
+    }
+
+    public void SetAllColumnsActive(bool active)
+    {
+        _activeColumns.Clear();
+        if (active)
+        {
+            for (int i = 0; i < _numericColumnNames.Count; i++)
+                _activeColumns.Add(i);
+        }
+
+        if (_suppressFilterEvents) return;
+        RebuildFilter();
+        OnFilterChanged?.Invoke();
+    }
+
+    public bool IsColumnActive(int colIndex)
+    {
+        return _activeColumns.Contains(colIndex);
+    }
 
     public void SetIndustryActive(string industry, bool active)
     {
@@ -331,10 +325,6 @@ public class CSVDataManager : MonoBehaviour
         return _activeIndustries.Contains(industry);
     }
 
-    #endregion
-
-    #region Year Filtering
-
     public void SetYearActive(string year, bool active)
     {
         if (active) _activeYears.Add(year);
@@ -363,10 +353,6 @@ public class CSVDataManager : MonoBehaviour
     {
         return _activeYears.Contains(year);
     }
-
-    #endregion
-
-    #region Country Filtering
 
     public void SetCountryActive(string countryCode, bool active)
     {
@@ -397,15 +383,14 @@ public class CSVDataManager : MonoBehaviour
         return _activeCountries.Contains(countryCode);
     }
 
-    #endregion
-
-    #region Filter Rebuild
-
     public void ClearAllFilters()
     {
         _activeIndustries = new HashSet<string>(_allIndustries);
         _activeYears = new HashSet<string>(_allYears);
         _activeCountries = new HashSet<string>(_allCountries);
+        _activeColumns.Clear();
+        for (int i = 0; i < _numericColumnNames.Count; i++)
+            _activeColumns.Add(i);
         RebuildFilter();
         OnFilterChanged?.Invoke();
     }
@@ -428,10 +413,6 @@ public class CSVDataManager : MonoBehaviour
         RecalculateColumnRanges();
     }
 
-    #endregion
-
-    #region Normalization
-
     private void RecalculateColumnRanges()
     {
         int colCount = _numericColumnNames.Count;
@@ -440,6 +421,13 @@ public class CSVDataManager : MonoBehaviour
 
         for (int c = 0; c < colCount; c++)
         {
+            if (!_activeColumns.Contains(c))
+            {
+                _columnMins[c] = 0f;
+                _columnMaxes[c] = 1f;
+                continue;
+            }
+
             float min = float.MaxValue;
             float max = float.MinValue;
 
@@ -482,10 +470,6 @@ public class CSVDataManager : MonoBehaviour
         return (_columnMins[colIndex], _columnMaxes[colIndex]);
     }
 
-    #endregion
-
-    #region Utility
-
     private static float ParseFloat(string value)
     {
         if (string.IsNullOrEmpty(value)) return 0f;
@@ -500,6 +484,4 @@ public class CSVDataManager : MonoBehaviour
         if (int.TryParse(value, out int result)) return result;
         return 0;
     }
-
-    #endregion
 }

@@ -4,28 +4,23 @@ using UnityEngine;
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class DataSurfaceGenerator : MonoBehaviour
 {
-    #region Inspector Fields
-
-    [Header("Bounding Box")]
     public float maxSurfaceWidth = 1.5f;
     public float maxSurfaceDepth = 1.0f;
     public float maxSurfaceHeight = 0.5f;
 
-    [Header("Appearance")]
     [Range(0.1f, 1.0f)]
     public float surfaceAlpha = 0.6f;
 
-    [Header("Animation")]
     public float animationSpeed = 3.0f;
+    public float collapseSpeed = 4.5f;
     public bool skipIntroAnimation = false;
 
-    #endregion
-
-    #region Private Fields
+    private enum SurfaceState { Idle, Collapsing, Rising }
 
     private Mesh _mesh;
     private MeshFilter _meshFilter;
     private MeshRenderer _meshRenderer;
+    private MeshCollider _meshCollider;
 
     private Vector3[] _vertices;
     private Vector3[] _targetVertices;
@@ -41,7 +36,8 @@ public class DataSurfaceGenerator : MonoBehaviour
     private float _currentColumnSpacing;
     private float _currentRowSpacing;
     private List<int> _activeColumnIndices = new List<int>();
-    private bool _isAnimating;
+    private SurfaceState _state = SurfaceState.Idle;
+    private bool _pendingRebuild;
     private bool _meshBuilt;
     private bool _arraysAllocated;
 
@@ -55,14 +51,11 @@ public class DataSurfaceGenerator : MonoBehaviour
         new Color(1.0f, 0.0f, 0.0f)
     };
 
-    #endregion
-
-    #region Lifecycle
-
     private void Awake()
     {
         _meshFilter = GetComponent<MeshFilter>();
         _meshRenderer = GetComponent<MeshRenderer>();
+        _meshCollider = GetComponent<MeshCollider>();
         _mesh = new Mesh { name = "DataSurface" };
         _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         _meshFilter.mesh = _mesh;
@@ -98,17 +91,18 @@ public class DataSurfaceGenerator : MonoBehaviour
 
     private void Update()
     {
-        if (!_isAnimating || !_meshBuilt) return;
+        if (_state == SurfaceState.Idle || !_meshBuilt) return;
 
-        bool stillAnimating = false;
-        float step = animationSpeed * Time.deltaTime;
+        bool stillMoving = false;
+        float speed = (_state == SurfaceState.Collapsing) ? collapseSpeed : animationSpeed;
+        float step = speed * Time.deltaTime;
 
         for (int i = 0; i < _activeVertexCount; i++)
         {
             if (Vector3.Distance(_vertices[i], _targetVertices[i]) > CONVERGENCE_THRESHOLD)
             {
                 _vertices[i] = Vector3.MoveTowards(_vertices[i], _targetVertices[i], step);
-                stillAnimating = true;
+                stillMoving = true;
             }
             else
             {
@@ -118,7 +112,7 @@ public class DataSurfaceGenerator : MonoBehaviour
             if (ColorDistance(_colors[i], _targetColors[i]) > CONVERGENCE_THRESHOLD)
             {
                 _colors[i] = Color.Lerp(_colors[i], _targetColors[i], step * 2f);
-                stillAnimating = true;
+                stillMoving = true;
             }
             else
             {
@@ -129,16 +123,22 @@ public class DataSurfaceGenerator : MonoBehaviour
         _mesh.vertices = _vertices;
         _mesh.colors = _colors;
 
-        if (!stillAnimating)
+        if (!stillMoving)
         {
-            _isAnimating = false;
-            _mesh.RecalculateNormals();
+            if (_state == SurfaceState.Collapsing)
+            {
+                _pendingRebuild = false;
+                BuildSurface(false);
+                _state = SurfaceState.Rising;
+            }
+            else
+            {
+                _state = SurfaceState.Idle;
+                _mesh.RecalculateNormals();
+                RefreshCollider();
+            }
         }
     }
-
-    #endregion
-
-    #region Array Allocation
 
     private void AllocateArrays()
     {
@@ -156,14 +156,42 @@ public class DataSurfaceGenerator : MonoBehaviour
         _arraysAllocated = true;
     }
 
-    #endregion
-
-    #region Surface Construction
-
     private void OnDataLoaded()
     {
         AllocateArrays();
         BuildSurface(false);
+        _state = skipIntroAnimation ? SurfaceState.Idle : SurfaceState.Rising;
+    }
+
+    private void OnFilterChanged()
+    {
+        if (!_meshBuilt)
+        {
+            BuildSurface(false);
+            _state = skipIntroAnimation ? SurfaceState.Idle : SurfaceState.Rising;
+            return;
+        }
+
+        if (_state == SurfaceState.Collapsing)
+        {
+            _pendingRebuild = true;
+            return;
+        }
+
+        StartCollapse();
+    }
+
+    private void StartCollapse()
+    {
+        for (int i = 0; i < _activeVertexCount; i++)
+        {
+            Vector3 v = _vertices[i];
+            _targetVertices[i] = new Vector3(v.x, 0f, v.z);
+            _targetColors[i] = new Color(_colors[i].r, _colors[i].g, _colors[i].b, 0f);
+        }
+
+        _state = SurfaceState.Collapsing;
+        _pendingRebuild = false;
     }
 
     public void BuildSurface(bool blendFromCurrent)
@@ -217,11 +245,7 @@ public class DataSurfaceGenerator : MonoBehaviour
                 _targetVertices[idx] = new Vector3(x, y, z);
                 _targetColors[idx] = color;
 
-                if (blendFromCurrent && _meshBuilt && idx < _activeVertexCount)
-                {
-                    continue;
-                }
-                else if (skipIntroAnimation)
+                if (skipIntroAnimation && !blendFromCurrent)
                 {
                     _vertices[idx] = new Vector3(x, y, z);
                     _colors[idx] = color;
@@ -254,7 +278,16 @@ public class DataSurfaceGenerator : MonoBehaviour
         _mesh.RecalculateBounds();
 
         _meshBuilt = true;
-        _isAnimating = !skipIntroAnimation || blendFromCurrent;
+        RefreshCollider();
+    }
+
+    private void RefreshCollider()
+    {
+        if (_meshCollider != null)
+        {
+            _meshCollider.sharedMesh = null;
+            _meshCollider.sharedMesh = _mesh;
+        }
     }
 
     private void BuildTriangles()
@@ -286,49 +319,20 @@ public class DataSurfaceGenerator : MonoBehaviour
             _triangles[i] = 0;
     }
 
-    #endregion
-
-    #region Filter Response
-
-    private void OnFilterChanged()
-    {
-        BuildSurface(true);
-    }
-
-    public void OnColumnVisibilityChanged()
-    {
-        BuildSurface(true);
-    }
-
-    #endregion
-
-    #region Active Columns
-
     private List<int> GetActiveColumnIndices()
     {
         var indices = new List<int>();
-        SurfaceFilterController filter = SurfaceFilterController.Instance;
-        int totalCols = CSVDataManager.Instance.NumericColumnNames.Count;
-
-        if (filter == null)
-        {
-            for (int i = 0; i < totalCols; i++)
-                indices.Add(i);
-            return indices;
-        }
+        CSVDataManager data = CSVDataManager.Instance;
+        int totalCols = data.NumericColumnNames.Count;
 
         for (int i = 0; i < totalCols; i++)
         {
-            if (filter.IsColumnVisible(i))
+            if (data.IsColumnActive(i))
                 indices.Add(i);
         }
 
         return indices;
     }
-
-    #endregion
-
-    #region Heatmap Sampling
 
     private static Color SampleHeatmap(float t)
     {
@@ -351,10 +355,6 @@ public class DataSurfaceGenerator : MonoBehaviour
         return Mathf.Sqrt(dr * dr + dg * dg + db * db + da * da);
     }
 
-    #endregion
-
-    #region Public Queries
-
     public (int row, int col) GetNearestCell(Vector3 worldPoint)
     {
         Vector3 local = transform.InverseTransformPoint(worldPoint);
@@ -370,6 +370,4 @@ public class DataSurfaceGenerator : MonoBehaviour
     public int RowCount => _rowCount;
     public int VisibleColCount => _visibleColCount;
     public List<int> ActiveColumnIndices => _activeColumnIndices;
-
-    #endregion
 }
