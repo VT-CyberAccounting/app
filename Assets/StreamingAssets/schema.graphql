@@ -1,0 +1,397 @@
+# =============================================================================
+# CyberAcc Financial Data Service — GraphQL Schema (LLM Tool Reference)
+# =============================================================================
+#
+# This schema documents the GraphQL API for querying financial and ESG data
+# on publicly traded US companies. The underlying dataset spans multiple years
+# and includes balance-sheet items, income-statement items, ESG scores, and
+# pre-computed financial ratios derived from those raw figures.
+#
+# IMPORTANT CONVENTIONS:
+#   - All monetary and numeric financial fields are nullable (the dataset has
+#     gaps). A null value means the data point was unavailable for that
+#     company-year, NOT that the value is zero.
+#   - Each row is uniquely identified by (ticker, year). The `id` field is an
+#     internal auto-increment key and is rarely useful for queries.
+#   - The `name` field supports fuzzy search via trigram similarity — use it
+#     when the user provides an approximate or partial company name.
+#   - Financial ratios (e.g. current_ratio, return_on_equity) are pre-computed
+#     from the raw fields. Prefer querying ratios directly over asking the LLM
+#     to compute them from raw inputs.
+#   - NODE LIMIT: The backend enforces a hard cap of 30 nodes per response.
+#     Any `limit` value above 30 (or omitted) will be clamped to 30. Plan
+#     queries accordingly — use `offset` for pagination if more rows are
+#     needed, and prefer aggregates over large node fetches when computing
+#     statistics. This cap may be lifted in future API versions.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# FILTER INPUTS
+# -----------------------------------------------------------------------------
+
+# Numeric filter — use on any numeric/float field in aggregation or filtering.
+# Multiple conditions are AND-ed together.
+#
+# Example: { gte: 1.5, lt: 3.0 }  =>  1.5 <= value < 3.0
+input numf {
+  eq: Float    # Exact equality
+  gt: Float    # Strictly greater than
+  gte: Float   # Greater than or equal
+  lt: Float    # Strictly less than
+  lte: Float   # Less than or equal
+}
+
+# String filter — use on string fields (name, ticker, cik).
+# Multiple conditions are AND-ed together.
+#
+# IMPORTANT: `contains` is NOT a substring match. It uses PostgreSQL trigram
+# word-similarity (pg_trgm `%>` operator). This means it tolerates typos,
+# abbreviations, and partial matches. Use it when the user gives an
+# approximate company name (e.g. "Microsft" will still match "Microsoft").
+#
+# Example: { contains: "apple" }  =>  fuzzy matches "Apple Inc.", "Apple Inc"
+input strf {
+  eq: String          # Exact case-sensitive equality
+  contains: String    # Fuzzy trigram word-similarity match (tolerates typos)
+  startswith: String  # Prefix match (case-sensitive)
+  endswith: String    # Suffix match (case-sensitive)
+}
+
+
+# -----------------------------------------------------------------------------
+# QUERY ENTRY POINT
+# -----------------------------------------------------------------------------
+
+type Query {
+  # Primary query for financial data. Returns both individual records (nodes)
+  # and aggregate statistics over the filtered result set.
+  #
+  # FILTER PARAMETERS (all optional, AND-ed together):
+  #   id       — Internal row ID. Rarely needed.
+  #   cik      — SEC Central Index Key (string, e.g. "320193" for Apple).
+  #              Use when the user references a CIK number.
+  #   ticker   — Stock ticker symbol (e.g. "AAPL", "MSFT"). Case-sensitive.
+  #              This is the most common way to look up a specific company.
+  #   name     — Company name filter using strf (supports fuzzy search).
+  #              Best for when the user says a company name instead of a ticker.
+  #   year     — Fiscal year (integer, e.g. 2023). Filters to a single year.
+  #
+  # RESULT SHAPING PARAMETERS:
+  #   distinct — Column name (string) to apply DISTINCT on. Returns only unique
+  #              values of that column. ALSO causes aggregates to GROUP BY this
+  #              column, so aggregate results become per-group.
+  #              Common uses:
+  #                distinct: "ticker"   — one row per company
+  #                distinct: "year"     — one row per year
+  #                distinct: "industry" — one row per industry
+  #   limit    — Max number of rows to return in `nodes`. Capped at 30 by the
+  #              backend regardless of the value provided. Does NOT affect
+  #              aggregate calculations (aggregates always run on full result).
+  #   offset   — Skip this many rows in `nodes` (for pagination). Does NOT
+  #              affect aggregate calculations.
+  #
+  # IMPORTANT: `limit` and `offset` only affect `nodes`. Aggregates always
+  # compute over the entire filtered (and optionally distinct) result set.
+  sln(
+    id: Int
+    cik: String
+    ticker: String
+    name: strf
+    year: Int
+    distinct: String
+    limit: Int
+    offset: Int
+  ): slnResult!
+}
+
+
+# -----------------------------------------------------------------------------
+# RESULT TYPES
+# -----------------------------------------------------------------------------
+
+# Wrapper containing both the list of records and aggregate functions.
+type slnResult {
+  nodes: [slnGQL!]!        # The individual matching records (respects limit/offset)
+  aggregates: aggregateSet! # Aggregate functions over the full filtered set
+}
+
+# Aggregate operations on the filtered result set.
+# If `distinct` was specified on the query, all aggregates are grouped by that
+# column and return arrays of { group_key, ...values } instead of flat objects.
+#
+# The `of` argument is a list of column name strings to aggregate.
+# Only numeric columns are valid targets for avg/sum/min/max/stddev.
+type aggregateSet {
+  # Total number of matching rows.
+  count: Int!
+
+  # Arithmetic mean of specified columns.
+  # Example: avg(of: ["assets", "liabilities"]) => { "assets": 1234.5, "liabilities": 678.9 }
+  # With distinct: "industry" on the parent query:
+  #   => [{ "industry": "Manufacturing", "assets": ..., "liabilities": ... }, ...]
+  avg(of: [String!]!): JSON!
+
+  # Sum of specified columns.
+  sum(of: [String!]!): JSON!
+
+  # Minimum value of specified columns.
+  min(of: [String!]!): JSON!
+
+  # Maximum value of specified columns.
+  max(of: [String!]!): JSON!
+
+  # Population standard deviation of specified columns.
+  stddev(of: [String!]!): JSON!
+}
+
+
+# -----------------------------------------------------------------------------
+# DATA TYPE: slnGQL
+# -----------------------------------------------------------------------------
+# Each record represents one company in one fiscal year.
+# Fields are organized by category below.
+
+type slnGQL {
+
+  # === IDENTIFIERS ===
+  id: Int!                  # Internal auto-increment key (rarely needed in queries)
+  ticker: String!           # Stock ticker symbol, e.g. "AAPL"
+  year: Int!                # Fiscal year, e.g. 2023
+  cik: String!              # SEC Central Index Key (unique per company)
+  name: String!             # Company legal name
+
+  # === ESG SCORES ===
+  # Environmental, Social, and Governance scores. Higher = better performance
+  # in that ESG dimension. These are composite scores from ESG rating providers.
+  environmental: Float      # Environmental pillar score
+  social: Float             # Social pillar score
+  governance: Float         # Governance pillar score
+  esg: Float                # Overall ESG composite score
+
+  # === CLASSIFICATION ===
+  gvkey: Float              # Compustat Global Company Key (links to Compustat database)
+  sic: Float                # Standard Industrial Classification code (numeric)
+  industry: String          # Human-readable industry classification derived from SIC:
+                            #   "Mining"                              (SIC 1000-1499)
+                            #   "Construction"                        (SIC 1500-1799)
+                            #   "Manufacturing"                       (SIC 2000-3999)
+                            #   "Transportation Public Utilities"     (SIC 4000-4999)
+                            #   "Wholesale Trade"                     (SIC 5000-5199)
+                            #   "Retail Trade"                        (SIC 5200-5999)
+                            #   "Services"                            (SIC 7000-8999)
+                            # null if SIC code does not fall into any of these ranges.
+
+  # === BALANCE SHEET — ASSETS ===
+  current_assets: Float                   # Total current assets
+  assets: Float                           # Total assets
+  cash: Float                             # Cash and cash equivalents
+  inventory: Float                        # Inventories
+  current_marketable_securities: Float    # Short-term marketable securities
+  property_plant_equipment: Float         # Net property, plant & equipment
+  total_receivables: Float                # Gross receivables (before allowance)
+  allowance_doubtful_receivables: Float   # Allowance for doubtful accounts
+  net_receivables: Float                  # Net receivables (after allowance)
+
+  # === BALANCE SHEET — LIABILITIES & EQUITY ===
+  current_liabilities: Float              # Total current liabilities
+  liabilities: Float                      # Total liabilities
+  stockholders_equity: Float              # Total stockholders' equity
+  pref_stock: Float                       # Preferred stock (liquidating value)
+  total_debt_including_current: Float     # Total debt (short-term + long-term)
+
+  # === INCOME STATEMENT ===
+  cost_goods_sold: Float                          # Cost of goods sold (COGS)
+  sales_by_turnover: Float                        # Net sales / revenue
+  earnings_before_interest_taxes: Float           # EBIT
+  net_income_loss: Float                          # Net income (loss)
+  net_income_adjusted_common_stocks: Float        # Net income available to common shareholders
+  interest_related_expense: Float                 # Interest expense
+  earnings_per_share_basic: Float                 # Basic EPS (as reported)
+  dividends: Float                                # Dividends per share
+  dividends_pref: Float                           # Preferred dividends
+  common_shares_outstanding: Float                # Shares outstanding
+
+  # === MARKET DATA ===
+  price_closed_annual: Float              # Fiscal year-end closing stock price
+
+  # === PRIOR-YEAR FIELDS (used in ratio calculations) ===
+  # These are the previous year's values, carried forward for computing
+  # average-based ratios. Generally not needed directly — use the ratios below.
+  total_assets_last_year: Float
+  net_receivables_last_year: Float
+  inventory_last_year: Float
+  stockholders_equity_last_year: Float
+  cost_goods_sold_last_year: Float
+  common_shares_outstanding_last_year: Float
+
+  # === LIQUIDITY RATIOS ===
+  # Measure ability to meet short-term obligations.
+  working_capital: Float                          # current_assets - current_liabilities
+  current_ratio: Float                            # current_assets / current_liabilities
+                                                  # (> 1.0 = can cover short-term debts)
+  quick_ratio: Float                              # (cash + marketable_securities + net_receivables) / current_liabilities
+                                                  # (stricter than current_ratio — excludes inventory)
+
+  # === ACTIVITY / EFFICIENCY RATIOS ===
+  # Measure how effectively the company uses its assets.
+  accounts_receivable_turnover: Float             # sales / avg(net_receivables)
+  average_days_to_collect_receivables: Float      # 365 / accounts_receivable_turnover
+  inventory_turnover: Float                       # COGS / avg(inventory)
+  average_days_to_collect_inventory: Float        # 365 / inventory_turnover
+
+  # === LEVERAGE / SOLVENCY RATIOS ===
+  # Measure long-term financial stability and debt burden.
+  debt_to_assets: Float                           # liabilities / assets
+  debt_to_equity: Float                           # liabilities / stockholders_equity
+  number_of_times_interest_is_earned: Float       # EBIT / interest_expense
+                                                  # (aka interest coverage ratio)
+
+  # === PROFITABILITY RATIOS ===
+  # Measure ability to generate profit.
+  net_margin: Float                               # net_income / sales
+  asset_turnover_ratio: Float                     # sales / avg(total_assets)
+  return_on_investment: Float                     # net_income / avg(total_assets)  (ROA)
+  return_on_equity: Float                         # net_income / avg(stockholders_equity) (ROE)
+
+  # === PER-SHARE & VALUATION METRICS ===
+  earnings_per_share: Float                       # net_income / shares_outstanding (computed)
+  book_value_per_share: Float                     # (equity - pref_stock) / shares_outstanding
+  price_earnings_ratio: Float                     # stock_price / EPS
+  dividend_yield: Float                           # dividends_per_share / stock_price
+}
+
+
+# =============================================================================
+# EXAMPLE QUERIES
+# =============================================================================
+#
+# 1. LOOK UP A COMPANY BY TICKER AND YEAR
+#    Retrieve Apple's 2023 financials including key ratios.
+#
+#    query {
+#      sln(ticker: "AAPL", year: 2023) {
+#        nodes {
+#          name
+#          ticker
+#          year
+#          assets
+#          liabilities
+#          net_income_loss
+#          current_ratio
+#          return_on_equity
+#          debt_to_equity
+#          esg
+#        }
+#        aggregates {
+#          count
+#        }
+#      }
+#    }
+#
+#
+# 2. FUZZY SEARCH BY COMPANY NAME
+#    Find a company when only an approximate name is known.
+#    The `contains` operator uses trigram similarity, so minor typos
+#    or abbreviations are tolerated.
+#
+#    query {
+#      sln(name: { contains: "Microsft" }, year: 2022) {
+#        nodes {
+#          ticker
+#          name
+#          esg
+#          return_on_equity
+#        }
+#        aggregates { count }
+#      }
+#    }
+#
+#
+# 3. COMPARE AVERAGE ESG AND PROFITABILITY ACROSS INDUSTRIES
+#    Use `distinct: "industry"` so that aggregates are grouped by industry.
+#    The `nodes` list will contain one representative row per industry
+#    (useful to see which industries exist), while `aggregates` returns
+#    per-industry statistics.
+#
+#    query {
+#      sln(year: 2023, distinct: "industry") {
+#        nodes {
+#          industry
+#        }
+#        aggregates {
+#          count
+#          avg(of: ["esg", "return_on_equity", "net_margin"])
+#          stddev(of: ["esg"])
+#        }
+#      }
+#    }
+#
+#
+# 4. FIND THE TOP 5 MOST PROFITABLE COMPANIES IN A YEAR
+#    Use `limit` for pagination. Note: the API does not support ORDER BY
+#    directly — when ranking is needed, fetch a broader set and note that
+#    the LLM should sort client-side, or use aggregates for max/min.
+#
+#    query {
+#      sln(year: 2023, limit: 5) {
+#        nodes {
+#          ticker
+#          name
+#          net_income_loss
+#          return_on_equity
+#          net_margin
+#        }
+#        aggregates {
+#          max(of: ["return_on_equity", "net_margin"])
+#        }
+#      }
+#    }
+#
+#
+# 5. MULTI-YEAR TREND FOR A SINGLE COMPANY
+#    Omit the `year` filter to get all available years for a ticker.
+#    Use `distinct: "year"` to ensure one record per year.
+#
+#    query {
+#      sln(ticker: "TSLA", distinct: "year") {
+#        nodes {
+#          year
+#          assets
+#          liabilities
+#          net_income_loss
+#          esg
+#          environmental
+#          social
+#          governance
+#          current_ratio
+#          debt_to_equity
+#          return_on_equity
+#        }
+#        aggregates {
+#          count
+#          avg(of: ["return_on_equity", "esg"])
+#          min(of: ["net_income_loss"])
+#          max(of: ["net_income_loss"])
+#        }
+#      }
+#    }
+#
+#
+# 6. AGGREGATE-ONLY QUERY (no node fields needed)
+#    Get summary statistics without fetching individual records.
+#    Use `limit: 0` to skip all nodes while still computing aggregates
+#    over the full result set.
+#
+#    query {
+#      sln(year: 2023, limit: 0) {
+#        nodes { ticker }
+#        aggregates {
+#          count
+#          avg(of: ["debt_to_equity", "current_ratio", "esg"])
+#          stddev(of: ["debt_to_equity", "current_ratio", "esg"])
+#        }
+#      }
+#    }
+#
+# =============================================================================

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Google.GenAI;
 using Google.GenAI.Types;
@@ -16,7 +17,7 @@ public static class Gemini {
             client = new Client(apiKey: "");
             Debug.Log("gemini init");
             session = await client.Live.ConnectAsync(
-                model: "gemini-2.5-flash-native-audio-preview-12-2025",
+                model: "gemini-3.1-flash-live-preview",
                 config: new LiveConnectConfig {
                     ResponseModalities = new List<Modality> {
                         Modality.Audio
@@ -27,6 +28,12 @@ public static class Gemini {
                             PrebuiltVoiceConfig = new PrebuiltVoiceConfig {
                                 VoiceName = "Charon"
                             }
+                        }
+                    },
+                    Tools = new List<Tool> {
+                        new Tool {
+                            FunctionDeclarations = ToolTemplate.Registry.Values
+                                .Select(t => t.Declaration).ToList()
                         }
                     }
                 }
@@ -100,6 +107,8 @@ public static class Gemini {
 
         if (response.ToolCall != null) {
             Debug.Log($"[Gemini] ToolCall received — {response.ToolCall.FunctionCalls?.Count ?? 0} function call(s)");
+            foreach (var call in response.ToolCall.FunctionCalls ?? new List<FunctionCall>())
+                _ = ToolTemplate.Run(session, call);
             return;
         }
 
