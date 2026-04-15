@@ -4,7 +4,9 @@ using TMPro;
 
 public class DataTooltipUI : MonoBehaviour
 {
-    public Vector3 offset = new Vector3(0.05f, 0.08f, 0f);
+    public float fixedDistance = 0.7f;
+    public float horizontalOffset = 0.1f;
+    public float verticalOffset = 0.1f;
 
     private Canvas _canvas;
     private Image _colorSwatch;
@@ -49,9 +51,9 @@ public class DataTooltipUI : MonoBehaviour
         if (_tickerLabel != null) _tickerLabel.text = ticker;
         if (_companyLabel != null) _companyLabel.text = companyName;
         if (_industryLabel != null) _industryLabel.text = industry;
-        if (_countryLabel != null) _countryLabel.text = country;
+        if (_countryLabel != null) _countryLabel.text = CountryNames.GetFullName(country);
         if (_yearLabel != null) _yearLabel.text = year;
-        if (_columnLabel != null) _columnLabel.text = columnName;
+        if (_columnLabel != null) _columnLabel.text = ColumnDisplayNames.GetDisplayName(columnName);
         if (_valueLabel != null) _valueLabel.text = FormatCompactValue(rawValue);
 
         UpdatePosition(worldHitPoint);
@@ -71,15 +73,19 @@ public class DataTooltipUI : MonoBehaviour
         Transform cam = Camera.main?.transform;
         if (cam == null) return;
 
-        Vector3 toCamera = (cam.position - worldHitPoint).normalized;
-        Vector3 right = Vector3.Cross(Vector3.up, toCamera).normalized;
+        Vector3 headForward = cam.forward;
+        Vector3 rayDirection = (worldHitPoint - cam.position).normalized;
+        Vector3 right = Vector3.Cross(Vector3.up, headForward).normalized;
 
-        transform.position = worldHitPoint
-            + Vector3.up * offset.y
-            + right * offset.x
-            + toCamera * offset.z;
+        // Horizontal placement follows the ray, vertical follows the head
+        Vector3 blended = new Vector3(rayDirection.x, headForward.y, rayDirection.z).normalized;
 
-        transform.rotation = Quaternion.LookRotation(-toCamera, Vector3.up);
+        transform.position = cam.position
+            + blended * fixedDistance
+            + Vector3.up * verticalOffset
+            + right * horizontalOffset;
+
+        transform.rotation = Quaternion.LookRotation(blended, Vector3.up);
     }
 
     private T FindComponent<T>(string name) where T : Component

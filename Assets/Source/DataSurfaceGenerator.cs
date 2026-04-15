@@ -4,8 +4,8 @@ using UnityEngine;
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class DataSurfaceGenerator : MonoBehaviour
 {
-    public float maxSurfaceWidth = 1.5f;
-    public float maxSurfaceDepth = 1.0f;
+    public float maxSurfaceWidth = 3f;
+    public float maxSurfaceDepth = 5f;
     public float maxSurfaceHeight = 0.5f;
 
     [Range(0.1f, 1.0f)]
@@ -35,6 +35,8 @@ public class DataSurfaceGenerator : MonoBehaviour
     private int _visibleColCount;
     private float _currentColumnSpacing;
     private float _currentRowSpacing;
+    private float _fixedColSpacing;
+    private float _fixedRowSpacing;
     private List<int> _activeColumnIndices = new List<int>();
     private SurfaceState _state = SurfaceState.Idle;
     private bool _pendingRebuild;
@@ -143,15 +145,21 @@ public class DataSurfaceGenerator : MonoBehaviour
     private void AllocateArrays()
     {
         CSVDataManager data = CSVDataManager.Instance;
-        _maxVertexCount = data.AllRows.Count * data.NumericColumnNames.Count;
+        int totalRows = data.AllRows.Count;
+        int totalCols = data.NumericColumnNames.Count;
+
+        _maxVertexCount = totalRows * totalCols;
 
         _vertices = new Vector3[_maxVertexCount];
         _targetVertices = new Vector3[_maxVertexCount];
         _colors = new Color[_maxVertexCount];
         _targetColors = new Color[_maxVertexCount];
 
-        int maxQuads = (data.AllRows.Count - 1) * (data.NumericColumnNames.Count - 1);
+        int maxQuads = (totalRows - 1) * (totalCols - 1);
         _triangles = new int[maxQuads * 6];
+
+        _fixedColSpacing = maxSurfaceWidth / Mathf.Max(totalCols - 1, 1);
+        _fixedRowSpacing = maxSurfaceDepth / Mathf.Max(totalRows - 1, 1);
 
         _arraysAllocated = true;
     }
@@ -222,8 +230,8 @@ public class DataSurfaceGenerator : MonoBehaviour
             return;
         }
 
-        _currentColumnSpacing = maxSurfaceWidth / Mathf.Max(_visibleColCount - 1, 1);
-        _currentRowSpacing = maxSurfaceDepth / Mathf.Max(_rowCount - 1, 1);
+        _currentColumnSpacing = _fixedColSpacing;
+        _currentRowSpacing = _fixedRowSpacing;
 
         int newVertexCount = _rowCount * _visibleColCount;
 

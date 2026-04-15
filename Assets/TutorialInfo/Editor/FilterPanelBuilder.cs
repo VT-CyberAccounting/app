@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -11,21 +12,21 @@ public class FilterPanelBuilder
 #if UNITY_EDITOR
 
     private static readonly string[] NumericColumns = {
-        "Environmental", "Social", "Governance", "ESG_score",
-        "Current Assets", "Assets", "Cash", "Inventory",
+        "Environmental", "Social", "Governance", "ESG Score",
+        "Current Assets", "Total Assets", "Cash and Cash Equivalents", "Inventory",
         "Current Marketable Securities", "Current Liabilities",
-        "Liabilities", "Property, Plant and Equipment",
-        "Preferred/Preference Stock", "Allowance for Doubtful Receivables",
+        "Total Liabilities", "Property, Plant and Equipment",
+        "Preferred/Preference Stock", "Allowance for Doubtful Accounts",
         "Total Receivables", "Stockholders Equity", "Cost of Goods Sold",
-        "Dividends - Preferred/Preference", "Dividends",
+        "Preferred/Preference Dividends", "Dividends Paid",
         "Earnings Before Interest and Taxes", "Earnings Per Share (Basic)",
-        "Net Income (Loss)", "Net Income Adjusted for common stocks",
-        "Sales/Turnover (Net)", "Interest and Related Expense",
-        "Common Shares Outstanding", "Total Debt Including Current",
-        "Price Close - Annual -", "Net receivables",
-        "Total assets last year", "Net receivables last year",
-        "Inventory last year", "Stockholder equity last year",
-        "Cost of Goods Sold last year", "Common shares outstanding last year"
+        "Net Income (Loss)", "Net Income Available to Common Shareholders",
+        "Sales/Turnover (Net)", "Interest Expense",
+        "Common Shares Outstanding", "Total Debt (Including Current Portion)",
+        "Annual Close Price", "Net Receivables",
+        "Total Assets Last Year", "Net Receivables Last Year",
+        "Inventory Last Year", "Stockholder Equity Last Year",
+        "Cost of Goods Sold Last Year", "Common shares outstanding last year"
     };
 
     private static readonly string[] Industries = {
@@ -42,6 +43,22 @@ public class FilterPanelBuilder
     };
 
     private static readonly string[] TabNames = { "Columns", "Industries", "Years", "Countries" };
+
+    private static readonly Dictionary<string, string> CountryFullNames = new Dictionary<string, string>
+    {
+        { "BMU", "Bermuda" },
+        { "CAN", "Canada" },
+        { "CUW", "Curacao" },
+        { "CYM", "Cayman Islands" },
+        { "GBR", "United Kingdom" },
+        { "IRL", "Ireland" },
+        { "ISR", "Israel" },
+        { "LBR", "Liberia" },
+        { "MHL", "Marshall Islands" },
+        { "NLD", "Netherlands" },
+        { "USA", "United States of America" },
+        { "VGB", "British Virgin Islands" }
+    };
 
     private static readonly Color PanelBg = new Color(0.07f, 0.086f, 0.118f, 0.92f);
     private static readonly Color PanelBorder = new Color(0f, 0.82f, 0.9f, 0.23f);
@@ -321,10 +338,12 @@ public class FilterPanelBuilder
         CreateToggleTab(panelRoot, "ColumnsContent", NumericColumns, true);
         CreateToggleTab(panelRoot, "IndustriesContent", Industries, false);
         CreateToggleTab(panelRoot, "YearsContent", Years, false);
-        CreateToggleTab(panelRoot, "CountriesContent", Countries, false);
+
+        string[] countryDisplayNames = System.Array.ConvertAll(Countries, c => CountryFullNames.TryGetValue(c, out string n) ? n : c);
+        CreateToggleTab(panelRoot, "CountriesContent", Countries, false, countryDisplayNames);
     }
 
-    private static void CreateToggleTab(GameObject panelRoot, string name, string[] items, bool visible)
+    private static void CreateToggleTab(GameObject panelRoot, string name, string[] items, bool visible, string[] displayNames = null)
     {
         GameObject container = new GameObject(name);
         container.transform.SetParent(panelRoot.transform, false);
@@ -333,13 +352,24 @@ public class FilterPanelBuilder
         LayoutElement le = container.AddComponent<LayoutElement>();
         le.flexibleHeight = 1f;
 
+        VerticalLayoutGroup containerVlg = container.AddComponent<VerticalLayoutGroup>();
+        containerVlg.spacing = 0f;
+        containerVlg.childForceExpandWidth = true;
+        containerVlg.childForceExpandHeight = false;
+        containerVlg.childControlWidth = true;
+        containerVlg.childControlHeight = true;
+
         container.SetActive(visible);
+
+        CreateBulkButtons(container.transform);
 
         GameObject scrollObj = new GameObject("ScrollView");
         scrollObj.transform.SetParent(container.transform, false);
 
+        LayoutElement scrollLE = scrollObj.AddComponent<LayoutElement>();
+        scrollLE.flexibleHeight = 1f;
+
         RectTransform scrollRect = scrollObj.AddComponent<RectTransform>();
-        StretchFull(scrollRect);
 
         Image scrollBg = scrollObj.AddComponent<Image>();
         scrollBg.color = Color.clear;
@@ -376,7 +406,7 @@ public class FilterPanelBuilder
 
         VerticalLayoutGroup vlg = contentObj.AddComponent<VerticalLayoutGroup>();
         vlg.spacing = 6f;
-        vlg.padding = new RectOffset(0, 0, 8, 12);
+        vlg.padding = new RectOffset(0, 0, 0, 12);
         vlg.childForceExpandWidth = true;
         vlg.childForceExpandHeight = false;
         vlg.childControlWidth = true;
@@ -387,12 +417,11 @@ public class FilterPanelBuilder
 
         scroll.content = contentRect;
 
-        CreateBulkButtons(contentObj.transform);
-
         for (int i = 0; i < items.Length; i++)
         {
             string key = (name == "ColumnsContent") ? i.ToString() : items[i];
-            CreateToggleRow(contentObj.transform, items[i], key, true);
+            string label = displayNames != null ? displayNames[i] : items[i];
+            CreateToggleRow(contentObj.transform, label, key, true);
         }
     }
 
@@ -403,13 +432,13 @@ public class FilterPanelBuilder
         row.AddComponent<RectTransform>();
 
         LayoutElement le = row.AddComponent<LayoutElement>();
-        le.minHeight = 36f;
-        le.preferredHeight = 36f;
+        le.minHeight = 48f;
+        le.preferredHeight = 48f;
         le.flexibleHeight = 0f;
 
         HorizontalLayoutGroup hlg = row.AddComponent<HorizontalLayoutGroup>();
         hlg.spacing = 8f;
-        hlg.padding = new RectOffset(0, 0, 2, 2);
+        hlg.padding = new RectOffset(0, 0, 8, 8);
         hlg.childForceExpandWidth = false;
         hlg.childForceExpandHeight = true;
         hlg.childControlWidth = true;

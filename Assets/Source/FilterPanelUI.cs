@@ -107,10 +107,10 @@ public class FilterPanelUI : MonoBehaviour
 
             switch (i)
             {
-                case 0: BindToggles(scrollContent, _columnToggles, OnColumnToggle); BindBulkButtons(scrollContent, _columnToggles, OnColumnToggle); break;
-                case 1: BindToggles(scrollContent, _industryToggles, OnIndustryToggle); BindBulkButtons(scrollContent, _industryToggles, OnIndustryToggle); break;
-                case 2: BindToggles(scrollContent, _yearToggles, OnYearToggle); BindBulkButtons(scrollContent, _yearToggles, OnYearToggle); break;
-                case 3: BindToggles(scrollContent, _countryToggles, OnCountryToggle); BindBulkButtons(scrollContent, _countryToggles, OnCountryToggle); break;
+                case 0: BindToggles(scrollContent, _columnToggles, OnColumnToggle); BindBulkButtons(content, _columnToggles, OnColumnToggle); break;
+                case 1: BindToggles(scrollContent, _industryToggles, OnIndustryToggle); BindBulkButtons(content, _industryToggles, OnIndustryToggle); break;
+                case 2: BindToggles(scrollContent, _yearToggles, OnYearToggle); BindBulkButtons(content, _yearToggles, OnYearToggle); break;
+                case 3: BindToggles(scrollContent, _countryToggles, OnCountryToggle); BindBulkButtons(content, _countryToggles, OnCountryToggle); break;
             }
         }
     }
@@ -156,9 +156,9 @@ public class FilterPanelUI : MonoBehaviour
         }
     }
 
-    private void BindBulkButtons(Transform scrollContent, Dictionary<string, ToggleState> states, System.Action<string, bool> callback)
+    private void BindBulkButtons(Transform tabContainer, Dictionary<string, ToggleState> states, System.Action<string, bool> callback)
     {
-        Transform bulkButtons = scrollContent.Find("BulkButtons");
+        Transform bulkButtons = FindDeep(tabContainer, "BulkButtons");
         if (bulkButtons == null) return;
 
         Transform selectAll = bulkButtons.Find("Select all");
