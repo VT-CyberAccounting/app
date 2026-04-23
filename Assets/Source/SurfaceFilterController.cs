@@ -4,23 +4,35 @@ using UnityEngine;
 
 public class SurfaceFilterController : MonoBehaviour
 {
-    public static SurfaceFilterController Instance { get; private set; }
-
+    public CSVDataSource dataSource;
     public DataSurfaceGenerator surfaceGenerator;
 
     public event Action<int, bool> OnColumnToggled;
     public event Action<string, bool> OnIndustryChanged;
     public event Action<string, bool> OnYearChanged;
     public event Action<string, bool> OnCountryChanged;
+    public event Action OnSortChanged;
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-        Instance = this;
+        if (dataSource == null) dataSource = CSVDataSource.Instance;
+    }
+
+    private void Start()
+    {
+        if (dataSource == null) dataSource = CSVDataSource.Instance;
+        if (dataSource == null)
+            Debug.LogError($"[SurfaceFilterController:{name}] No CSVDataSource reference set and no singleton available.");
+    }
+
+    public void BeginBatch()
+    {
+        if (dataSource != null) dataSource.BeginBatchUpdate();
+    }
+
+    public void EndBatch()
+    {
+        if (dataSource != null) dataSource.EndBatchUpdate();
     }
 
     public void ToggleColumn(int colIndex)
@@ -30,39 +42,39 @@ public class SurfaceFilterController : MonoBehaviour
 
     public void SetColumnVisible(int colIndex, bool visible)
     {
-        if (CSVDataManager.Instance != null)
-            CSVDataManager.Instance.SetColumnActive(colIndex, visible);
+        if (dataSource != null)
+            dataSource.SetColumnActive(colIndex, visible);
 
         OnColumnToggled?.Invoke(colIndex, visible);
     }
 
     public bool IsColumnVisible(int colIndex)
     {
-        if (CSVDataManager.Instance == null) return true;
-        return CSVDataManager.Instance.IsColumnActive(colIndex);
+        if (dataSource == null) return true;
+        return dataSource.IsColumnActive(colIndex);
     }
 
     public void ShowAllColumns()
     {
-        if (CSVDataManager.Instance == null) return;
+        if (dataSource == null) return;
 
-        CSVDataManager.Instance.BeginBatchUpdate();
-        CSVDataManager.Instance.SetAllColumnsActive(true);
-        CSVDataManager.Instance.EndBatchUpdate();
+        dataSource.BeginBatchUpdate();
+        dataSource.SetAllColumnsActive(true);
+        dataSource.EndBatchUpdate();
 
-        for (int i = 0; i < CSVDataManager.Instance.NumericColumnNames.Count; i++)
+        for (int i = 0; i < dataSource.NumericColumnNames.Count; i++)
             OnColumnToggled?.Invoke(i, true);
     }
 
     public void HideAllColumns()
     {
-        if (CSVDataManager.Instance == null) return;
+        if (dataSource == null) return;
 
-        CSVDataManager.Instance.BeginBatchUpdate();
-        CSVDataManager.Instance.SetAllColumnsActive(false);
-        CSVDataManager.Instance.EndBatchUpdate();
+        dataSource.BeginBatchUpdate();
+        dataSource.SetAllColumnsActive(false);
+        dataSource.EndBatchUpdate();
 
-        for (int i = 0; i < CSVDataManager.Instance.NumericColumnNames.Count; i++)
+        for (int i = 0; i < dataSource.NumericColumnNames.Count; i++)
             OnColumnToggled?.Invoke(i, false);
     }
 
@@ -73,34 +85,34 @@ public class SurfaceFilterController : MonoBehaviour
 
     public void ToggleIndustry(string industry)
     {
-        if (CSVDataManager.Instance == null) return;
-        bool active = CSVDataManager.Instance.IsIndustryActive(industry);
+        if (dataSource == null) return;
+        bool active = dataSource.IsIndustryActive(industry);
         SetIndustryActive(industry, !active);
     }
 
     public void SetIndustryActive(string industry, bool active)
     {
-        if (CSVDataManager.Instance != null)
-            CSVDataManager.Instance.SetIndustryActive(industry, active);
+        if (dataSource != null)
+            dataSource.SetIndustryActive(industry, active);
 
         OnIndustryChanged?.Invoke(industry, active);
     }
 
     public bool IsIndustryActive(string industry)
     {
-        if (CSVDataManager.Instance == null) return true;
-        return CSVDataManager.Instance.IsIndustryActive(industry);
+        if (dataSource == null) return true;
+        return dataSource.IsIndustryActive(industry);
     }
 
     public void SetAllIndustriesActive(bool active)
     {
-        if (CSVDataManager.Instance == null) return;
+        if (dataSource == null) return;
 
-        CSVDataManager.Instance.BeginBatchUpdate();
-        CSVDataManager.Instance.SetAllIndustriesActive(active);
-        CSVDataManager.Instance.EndBatchUpdate();
+        dataSource.BeginBatchUpdate();
+        dataSource.SetAllIndustriesActive(active);
+        dataSource.EndBatchUpdate();
 
-        foreach (string industry in CSVDataManager.Instance.AllIndustries)
+        foreach (string industry in dataSource.AllIndustries)
             OnIndustryChanged?.Invoke(industry, active);
     }
 
@@ -111,34 +123,34 @@ public class SurfaceFilterController : MonoBehaviour
 
     public void ToggleYear(string year)
     {
-        if (CSVDataManager.Instance == null) return;
-        bool active = CSVDataManager.Instance.IsYearActive(year);
+        if (dataSource == null) return;
+        bool active = dataSource.IsYearActive(year);
         SetYearActive(year, !active);
     }
 
     public void SetYearActive(string year, bool active)
     {
-        if (CSVDataManager.Instance != null)
-            CSVDataManager.Instance.SetYearActive(year, active);
+        if (dataSource != null)
+            dataSource.SetYearActive(year, active);
 
         OnYearChanged?.Invoke(year, active);
     }
 
     public bool IsYearActive(string year)
     {
-        if (CSVDataManager.Instance == null) return true;
-        return CSVDataManager.Instance.IsYearActive(year);
+        if (dataSource == null) return true;
+        return dataSource.IsYearActive(year);
     }
 
     public void SetAllYearsActive(bool active)
     {
-        if (CSVDataManager.Instance == null) return;
+        if (dataSource == null) return;
 
-        CSVDataManager.Instance.BeginBatchUpdate();
-        CSVDataManager.Instance.SetAllYearsActive(active);
-        CSVDataManager.Instance.EndBatchUpdate();
+        dataSource.BeginBatchUpdate();
+        dataSource.SetAllYearsActive(active);
+        dataSource.EndBatchUpdate();
 
-        foreach (string year in CSVDataManager.Instance.AllYears)
+        foreach (string year in dataSource.AllYears)
             OnYearChanged?.Invoke(year, active);
     }
 
@@ -149,34 +161,34 @@ public class SurfaceFilterController : MonoBehaviour
 
     public void ToggleCountry(string countryCode)
     {
-        if (CSVDataManager.Instance == null) return;
-        bool active = CSVDataManager.Instance.IsCountryActive(countryCode);
+        if (dataSource == null) return;
+        bool active = dataSource.IsCountryActive(countryCode);
         SetCountryActive(countryCode, !active);
     }
 
     public void SetCountryActive(string countryCode, bool active)
     {
-        if (CSVDataManager.Instance != null)
-            CSVDataManager.Instance.SetCountryActive(countryCode, active);
+        if (dataSource != null)
+            dataSource.SetCountryActive(countryCode, active);
 
         OnCountryChanged?.Invoke(countryCode, active);
     }
 
     public bool IsCountryActive(string countryCode)
     {
-        if (CSVDataManager.Instance == null) return true;
-        return CSVDataManager.Instance.IsCountryActive(countryCode);
+        if (dataSource == null) return true;
+        return dataSource.IsCountryActive(countryCode);
     }
 
     public void SetAllCountriesActive(bool active)
     {
-        if (CSVDataManager.Instance == null) return;
+        if (dataSource == null) return;
 
-        CSVDataManager.Instance.BeginBatchUpdate();
-        CSVDataManager.Instance.SetAllCountriesActive(active);
-        CSVDataManager.Instance.EndBatchUpdate();
+        dataSource.BeginBatchUpdate();
+        dataSource.SetAllCountriesActive(active);
+        dataSource.EndBatchUpdate();
 
-        foreach (string country in CSVDataManager.Instance.AllCountries)
+        foreach (string country in dataSource.AllCountries)
             OnCountryChanged?.Invoke(country, active);
     }
 
@@ -187,22 +199,58 @@ public class SurfaceFilterController : MonoBehaviour
 
     public void ResetAllFilters()
     {
-        CSVDataManager.Instance.BeginBatchUpdate();
+        if (dataSource == null) return;
 
-        CSVDataManager.Instance.SetAllIndustriesActive(true);
-        CSVDataManager.Instance.SetAllYearsActive(true);
-        CSVDataManager.Instance.SetAllCountriesActive(true);
-        CSVDataManager.Instance.SetAllColumnsActive(true);
+        dataSource.BeginBatchUpdate();
 
-        CSVDataManager.Instance.EndBatchUpdate();
+        dataSource.SetAllIndustriesActive(true);
+        dataSource.SetAllYearsActive(true);
+        dataSource.SetAllCountriesActive(true);
+        dataSource.SetAllColumnsActive(true);
+        dataSource.ClearAllSorts();
+
+        dataSource.EndBatchUpdate();
 
         ResetColumns();
 
-        foreach (string industry in CSVDataManager.Instance.AllIndustries)
+        foreach (string industry in dataSource.AllIndustries)
             OnIndustryChanged?.Invoke(industry, true);
-        foreach (string year in CSVDataManager.Instance.AllYears)
+        foreach (string year in dataSource.AllYears)
             OnYearChanged?.Invoke(year, true);
-        foreach (string country in CSVDataManager.Instance.AllCountries)
+        foreach (string country in dataSource.AllCountries)
             OnCountryChanged?.Invoke(country, true);
+
+        OnSortChanged?.Invoke();
+    }
+
+    public void ApplySort(string field, CSVDataSource.SortDirection direction)
+    {
+        if (dataSource == null) return;
+        dataSource.ApplySort(field, direction);
+        OnSortChanged?.Invoke();
+    }
+
+    public void ClearSort(string field)
+    {
+        if (dataSource == null) return;
+        dataSource.ClearSort(field);
+        OnSortChanged?.Invoke();
+    }
+
+    public void ClearAllSorts()
+    {
+        if (dataSource == null) return;
+        dataSource.ClearAllSorts();
+        OnSortChanged?.Invoke();
+    }
+
+    public bool TryGetSortDirection(string field, out CSVDataSource.SortDirection direction)
+    {
+        if (dataSource == null)
+        {
+            direction = CSVDataSource.SortDirection.Ascending;
+            return false;
+        }
+        return dataSource.TryGetSortDirection(field, out direction);
     }
 }

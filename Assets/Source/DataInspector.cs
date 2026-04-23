@@ -4,6 +4,7 @@ using Oculus.Interaction;
 public class DataInspector : MonoBehaviour
 {
     public DataSurfaceGenerator surfaceGenerator;
+    public SurfaceDataSource dataSource;
     public DataTooltipUI tooltip;
 
     private RayInteractable _rayInteractable;
@@ -59,23 +60,33 @@ public class DataInspector : MonoBehaviour
     {
         if (surfaceGenerator == null || tooltip == null) return;
 
-        Transform cam = Camera.main?.transform;
-        if (cam != null)
+        Transform camTransform = CameraRig.MainTransform;
+        if (camTransform != null)
         {
-            Vector3 direction = (worldPoint - cam.position).normalized;
-            float distance = Vector3.Distance(cam.position, worldPoint);
-
-            if (Physics.Raycast(cam.position, direction, distance, _uiPanelLayer))
+            Vector3 camPos = camTransform.position;
+            Vector3 delta = worldPoint - camPos;
+            float distance = delta.magnitude;
+            if (distance > 0f)
             {
-                HideTooltip();
-                return;
+                Vector3 direction = delta / distance;
+                if (Physics.Raycast(camPos, direction, distance, _uiPanelLayer))
+                {
+                    HideTooltip();
+                    return;
+                }
             }
         }
 
-        CSVDataManager data = CSVDataManager.Instance;
+        SurfaceDataSource data = dataSource != null ? dataSource : CSVDataSource.Instance;
         if (data == null || !data.IsLoaded || data.FilteredRows.Count == 0) return;
 
         (int row, int col) = surfaceGenerator.GetNearestCell(worldPoint);
+
+        if (row < 0 || col < 0)
+        {
+            HideTooltip();
+            return;
+        }
 
         if (row == _lastRow && col == _lastCol)
         {
@@ -89,12 +100,12 @@ public class DataInspector : MonoBehaviour
         if (row >= data.FilteredRows.Count || col >= data.NumericColumnNames.Count)
             return;
 
-        CSVDataManager.DataRow dataRow = data.FilteredRows[row];
+        SurfaceDataSource.DataRow dataRow = data.FilteredRows[row];
         float rawValue = data.GetRawValue(row, col);
         float normalizedValue = data.GetNormalizedValue(row, col);
         string columnName = data.NumericColumnNames[col];
 
-        tooltip.Show(
+        tooltip.ShowCell(
             worldPoint,
             dataRow.Ticker,
             dataRow.CompanyName,

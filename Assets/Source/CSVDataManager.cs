@@ -1,59 +1,46 @@
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using UnityEngine;
 
-public class CSVDataManager : MonoBehaviour
+public class CSVDataSource : SurfaceDataSource
 {
-    public static CSVDataManager Instance { get; private set; }
+    public enum SortDirection { Ascending, Descending }
 
-    public struct DataRow
+    public struct SortCriterion
     {
-        public string Ticker;
-        public string CompanyName;
-        public string Year;
-        public string CountryCode;
-        public string City;
-        public int SICCode;
-        public string Industry;
-        public float[] NumericValues;
+        public string Field;
+        public SortDirection Direction;
     }
 
-    public string csvFileName = "Case_Study_Data.csv";
+    public const string SortFieldIndustry = "Industry";
+    public const string SortFieldYear = "Year";
+    public const string SortFieldCountry = "Country";
 
-    public List<DataRow> AllRows => _allRows;
-    public List<DataRow> FilteredRows => _filteredRows;
-    public List<string> NumericColumnNames => _numericColumnNames;
+    public static CSVDataSource Instance { get; private set; }
+
+    public string csvFileName = "Case_Study_Data.csv";
+    public bool loadOnStart = true;
+    public bool claimSingleton = true;
+
     public List<string> AllIndustries => _allIndustries;
     public List<string> AllYears => _allYears;
     public List<string> AllCountries => _allCountries;
     public HashSet<string> ActiveIndustries => _activeIndustries;
     public HashSet<string> ActiveYears => _activeYears;
     public HashSet<string> ActiveCountries => _activeCountries;
-    public bool IsLoaded => _isLoaded;
 
-    public event Action OnDataLoaded;
-    public event Action OnFilterChanged;
-
-    private List<DataRow> _allRows = new List<DataRow>(2048);
-    private List<DataRow> _filteredRows = new List<DataRow>(2048);
-    private List<string> _numericColumnNames = new List<string>();
     private Dictionary<string, int> _headerIndex = new Dictionary<string, int>();
-    private bool _isLoaded;
-    private bool _suppressFilterEvents;
 
     private HashSet<string> _activeIndustries = new HashSet<string>();
     private HashSet<string> _activeYears = new HashSet<string>();
     private HashSet<string> _activeCountries = new HashSet<string>();
-    private HashSet<int> _activeColumns = new HashSet<int>();
 
     private List<string> _allIndustries = new List<string>();
     private List<string> _allYears = new List<string>();
     private List<string> _allCountries = new List<string>();
 
-    private float[] _columnMins;
-    private float[] _columnMaxes;
+    private List<SortCriterion> _sortStack = new List<SortCriterion>(3);
 
     private static readonly string[] _industryFlags = {
         "Mining", "Construction", "Manufactuing",
@@ -71,53 +58,64 @@ public class CSVDataManager : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
+        if (claimSingleton && Instance == null)
         {
-            Destroy(gameObject);
-            return;
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
         }
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
     }
 
     private void Start()
     {
-        StartCoroutine(LoadCSVCoroutine());
+        if (loadOnStart)
+            StartCoroutine(LoadFromStreamingAssets(csvFileName));
     }
 
-    private System.Collections.IEnumerator LoadCSVCoroutine()
+    public System.Collections.IEnumerator LoadFromStreamingAssets(string fileName)
     {
-        string path = Path.Combine(Application.streamingAssetsPath, csvFileName);
-        string csvText = null;
+        string path = Path.Combine(Application.streamingAssetsPath, fileName);
+        string url = path.Contains("://") ? path : "file://" + path;
+        string csvText;
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-        using (UnityEngine.Networking.UnityWebRequest www = UnityEngine.Networking.UnityWebRequest.Get(path))
+        using (UnityEngine.Networking.UnityWebRequest www = UnityEngine.Networking.UnityWebRequest.Get(url))
         {
             yield return www.SendWebRequest();
 
             if (www.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"[CSVDataManager] Failed to load CSV: {www.error}");
+                Debug.LogError($"[CSVDataSource:{name}] Failed to load CSV: {www.error}");
+                _allRows.Clear();
+                _filteredRows.Clear();
+                _numericColumnNames.Clear();
+                _activeColumns.Clear();
+                RaiseDataLoaded();
                 yield break;
             }
 
             csvText = www.downloadHandler.text;
         }
-#else
-        if (!File.Exists(path))
-        {
-            Debug.LogError($"[CSVDataManager] File not found: {path}");
-            yield break;
-        }
 
-        csvText = File.ReadAllText(path);
-#endif
-
-        ProcessCSV(csvText);
+        LoadFromCsvText(csvText);
     }
 
-    private void ProcessCSV(string csvText)
+    public void LoadFromPath(string absolutePath)
     {
+        if (!File.Exists(absolutePath))
+        {
+            Debug.LogError($"[CSVDataSource] File not found: {absolutePath}");
+            return;
+        }
+        LoadFromCsvText(File.ReadAllText(absolutePath));
+    }
+
+    public void LoadFromCsvText(string csvText)
+    {
+        _allRows.Clear();
+        _filteredRows.Clear();
+        _numericColumnNames.Clear();
+        _headerIndex.Clear();
+        _activeColumns.Clear();
+
         string[] lines = csvText.Split(new[] { "\r\n", "\n" }, System.StringSplitOptions.None);
         if (lines.Length < 2) return;
 
@@ -145,7 +143,8 @@ public class CSVDataManager : MonoBehaviour
                 City = GetField(fields, "City"),
                 SICCode = ParseInt(GetField(fields, "SIC code")),
                 Industry = ResolveIndustry(fields),
-                NumericValues = new float[_numericColumnNames.Count]
+                NumericValues = new float[_numericColumnNames.Count],
+                OriginalIndex = _allRows.Count
             };
 
             for (int j = 0; j < _numericColumnNames.Count; j++)
@@ -154,43 +153,43 @@ public class CSVDataManager : MonoBehaviour
             _allRows.Add(row);
         }
 
-        _isLoaded = true;
         CollectDistinctValues();
         RebuildFilter();
 
-        Debug.Log($"[CSVDataManager] Loaded {_allRows.Count} rows, {_numericColumnNames.Count} numeric columns, {_allIndustries.Count} industries, {_allYears.Count} years, {_allCountries.Count} countries");
-        OnDataLoaded?.Invoke();
+        Debug.Log($"[CSVDataSource:{name}] Loaded {_allRows.Count} rows, {_numericColumnNames.Count} numeric columns, {_allIndustries.Count} industries, {_allYears.Count} years, {_allCountries.Count} countries");
+        RaiseDataLoaded();
     }
 
     private void CollectDistinctValues()
     {
-        HashSet<string> industries = new HashSet<string>();
-        HashSet<string> years = new HashSet<string>();
-        HashSet<string> countries = new HashSet<string>();
+        _activeIndustries.Clear();
+        _activeYears.Clear();
+        _activeCountries.Clear();
 
         for (int i = 0; i < _allRows.Count; i++)
         {
             if (!string.IsNullOrEmpty(_allRows[i].Industry))
-                industries.Add(_allRows[i].Industry);
+                _activeIndustries.Add(_allRows[i].Industry);
             if (!string.IsNullOrEmpty(_allRows[i].Year))
-                years.Add(_allRows[i].Year);
+                _activeYears.Add(_allRows[i].Year);
             if (!string.IsNullOrEmpty(_allRows[i].CountryCode))
-                countries.Add(_allRows[i].CountryCode);
+                _activeCountries.Add(_allRows[i].CountryCode);
         }
 
-        _allIndustries = new List<string>(industries);
+        _allIndustries.Clear();
+        _allIndustries.AddRange(_activeIndustries);
         _allIndustries.Sort();
-        _allYears = new List<string>(years);
-        _allYears.Sort();
-        _allCountries = new List<string>(countries);
-        _allCountries.Sort();
 
-        _activeIndustries = new HashSet<string>(industries);
-        _activeYears = new HashSet<string>(years);
-        _activeCountries = new HashSet<string>(countries);
+        _allYears.Clear();
+        _allYears.AddRange(_activeYears);
+        _allYears.Sort();
+
+        _allCountries.Clear();
+        _allCountries.AddRange(_activeCountries);
+        _allCountries.Sort();
     }
 
-    private List<string> ParseCSVLine(string line)
+    private static List<string> ParseCSVLine(string line)
     {
         var fields = new List<string>();
         bool inQuotes = false;
@@ -255,69 +254,39 @@ public class CSVDataManager : MonoBehaviour
         return "Unknown";
     }
 
-    public void BeginBatchUpdate()
-    {
-        _suppressFilterEvents = true;
-    }
-
-    public void EndBatchUpdate()
-    {
-        _suppressFilterEvents = false;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
-    }
-
-    public void SetColumnActive(int colIndex, bool active)
-    {
-        if (active) _activeColumns.Add(colIndex);
-        else _activeColumns.Remove(colIndex);
-
-        if (_suppressFilterEvents) return;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
-    }
-
-    public void SetAllColumnsActive(bool active)
-    {
-        _activeColumns.Clear();
-        if (active)
-        {
-            for (int i = 0; i < _numericColumnNames.Count; i++)
-                _activeColumns.Add(i);
-        }
-
-        if (_suppressFilterEvents) return;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
-    }
-
-    public bool IsColumnActive(int colIndex)
-    {
-        return _activeColumns.Contains(colIndex);
-    }
-
     public void SetIndustryActive(string industry, bool active)
     {
+        bool currentlyActive = _activeIndustries.Contains(industry);
+        if (currentlyActive == active) return;
+
         if (active) _activeIndustries.Add(industry);
         else _activeIndustries.Remove(industry);
 
-        if (_suppressFilterEvents) return;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
+        NotifyChanged();
     }
 
     public void SetAllIndustriesActive(bool active)
     {
-        _activeIndustries.Clear();
+        int total = _allIndustries.Count;
+        bool changed;
         if (active)
         {
-            for (int i = 0; i < _allIndustries.Count; i++)
-                _activeIndustries.Add(_allIndustries[i]);
+            changed = _activeIndustries.Count != total;
+            if (changed)
+            {
+                _activeIndustries.Clear();
+                for (int i = 0; i < total; i++)
+                    _activeIndustries.Add(_allIndustries[i]);
+            }
+        }
+        else
+        {
+            changed = _activeIndustries.Count > 0;
+            if (changed) _activeIndustries.Clear();
         }
 
-        if (_suppressFilterEvents) return;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
+        if (!changed) return;
+        NotifyChanged();
     }
 
     public bool IsIndustryActive(string industry)
@@ -327,26 +296,37 @@ public class CSVDataManager : MonoBehaviour
 
     public void SetYearActive(string year, bool active)
     {
+        bool currentlyActive = _activeYears.Contains(year);
+        if (currentlyActive == active) return;
+
         if (active) _activeYears.Add(year);
         else _activeYears.Remove(year);
 
-        if (_suppressFilterEvents) return;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
+        NotifyChanged();
     }
 
     public void SetAllYearsActive(bool active)
     {
-        _activeYears.Clear();
+        int total = _allYears.Count;
+        bool changed;
         if (active)
         {
-            for (int i = 0; i < _allYears.Count; i++)
-                _activeYears.Add(_allYears[i]);
+            changed = _activeYears.Count != total;
+            if (changed)
+            {
+                _activeYears.Clear();
+                for (int i = 0; i < total; i++)
+                    _activeYears.Add(_allYears[i]);
+            }
+        }
+        else
+        {
+            changed = _activeYears.Count > 0;
+            if (changed) _activeYears.Clear();
         }
 
-        if (_suppressFilterEvents) return;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
+        if (!changed) return;
+        NotifyChanged();
     }
 
     public bool IsYearActive(string year)
@@ -356,26 +336,37 @@ public class CSVDataManager : MonoBehaviour
 
     public void SetCountryActive(string countryCode, bool active)
     {
+        bool currentlyActive = _activeCountries.Contains(countryCode);
+        if (currentlyActive == active) return;
+
         if (active) _activeCountries.Add(countryCode);
         else _activeCountries.Remove(countryCode);
 
-        if (_suppressFilterEvents) return;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
+        NotifyChanged();
     }
 
     public void SetAllCountriesActive(bool active)
     {
-        _activeCountries.Clear();
+        int total = _allCountries.Count;
+        bool changed;
         if (active)
         {
-            for (int i = 0; i < _allCountries.Count; i++)
-                _activeCountries.Add(_allCountries[i]);
+            changed = _activeCountries.Count != total;
+            if (changed)
+            {
+                _activeCountries.Clear();
+                for (int i = 0; i < total; i++)
+                    _activeCountries.Add(_allCountries[i]);
+            }
+        }
+        else
+        {
+            changed = _activeCountries.Count > 0;
+            if (changed) _activeCountries.Clear();
         }
 
-        if (_suppressFilterEvents) return;
-        RebuildFilter();
-        OnFilterChanged?.Invoke();
+        if (!changed) return;
+        NotifyChanged();
     }
 
     public bool IsCountryActive(string countryCode)
@@ -385,17 +376,110 @@ public class CSVDataManager : MonoBehaviour
 
     public void ClearAllFilters()
     {
-        _activeIndustries = new HashSet<string>(_allIndustries);
-        _activeYears = new HashSet<string>(_allYears);
-        _activeCountries = new HashSet<string>(_allCountries);
+        _activeIndustries.Clear();
+        for (int i = 0; i < _allIndustries.Count; i++)
+            _activeIndustries.Add(_allIndustries[i]);
+
+        _activeYears.Clear();
+        for (int i = 0; i < _allYears.Count; i++)
+            _activeYears.Add(_allYears[i]);
+
+        _activeCountries.Clear();
+        for (int i = 0; i < _allCountries.Count; i++)
+            _activeCountries.Add(_allCountries[i]);
+
         _activeColumns.Clear();
         for (int i = 0; i < _numericColumnNames.Count; i++)
             _activeColumns.Add(i);
         RebuildFilter();
-        OnFilterChanged?.Invoke();
+        RaiseFilterChanged();
     }
 
-    private void RebuildFilter()
+    public void ApplySort(string field, SortDirection direction)
+    {
+        if (_sortStack.Count > 0 && _sortStack[0].Field == field && _sortStack[0].Direction == direction)
+            return;
+
+        for (int i = 0; i < _sortStack.Count; i++)
+        {
+            if (_sortStack[i].Field == field)
+            {
+                _sortStack.RemoveAt(i);
+                break;
+            }
+        }
+        _sortStack.Insert(0, new SortCriterion { Field = field, Direction = direction });
+
+        NotifyChanged();
+    }
+
+    public void ClearSort(string field)
+    {
+        bool changed = false;
+        for (int i = 0; i < _sortStack.Count; i++)
+        {
+            if (_sortStack[i].Field == field)
+            {
+                _sortStack.RemoveAt(i);
+                changed = true;
+                break;
+            }
+        }
+        if (!changed) return;
+        NotifyChanged();
+    }
+
+    public void ClearAllSorts()
+    {
+        if (_sortStack.Count == 0) return;
+        _sortStack.Clear();
+        NotifyChanged();
+    }
+
+    public override int SortDepth => _sortStack.Count;
+
+    public override string GetSortFieldAt(int stackIndex)
+    {
+        if (stackIndex < 0 || stackIndex >= _sortStack.Count) return null;
+        return _sortStack[stackIndex].Field;
+    }
+
+    public override string GetRowSortKey(int filteredRowIndex, string sortField)
+    {
+        if (filteredRowIndex < 0 || filteredRowIndex >= _filteredRows.Count) return null;
+        DataRow row = _filteredRows[filteredRowIndex];
+        switch (sortField)
+        {
+            case SortFieldIndustry: return row.Industry ?? "";
+            case SortFieldYear: return row.Year ?? "";
+            case SortFieldCountry: return row.CountryCode ?? "";
+            default: return null;
+        }
+    }
+
+    public override string GetSortSectionDisplayValue(string sortField, string sectionKey)
+    {
+        if (string.IsNullOrEmpty(sectionKey)) return "";
+        if (sortField == SortFieldCountry)
+            return ResolveCountryName(sectionKey);
+        return sectionKey;
+    }
+
+    public bool TryGetSortDirection(string field, out SortDirection direction)
+    {
+        for (int i = 0; i < _sortStack.Count; i++)
+        {
+            if (_sortStack[i].Field == field)
+            {
+                direction = _sortStack[i].Direction;
+                return true;
+            }
+        }
+        direction = SortDirection.Ascending;
+        return false;
+    }
+
+    protected override void RebuildFilter()
     {
         _filteredRows.Clear();
 
@@ -410,64 +494,48 @@ public class CSVDataManager : MonoBehaviour
             _filteredRows.Add(row);
         }
 
+        ApplySortToFilteredRows();
         RecalculateColumnRanges();
     }
 
-    private void RecalculateColumnRanges()
+    private void ApplySortToFilteredRows()
     {
-        int colCount = _numericColumnNames.Count;
-        _columnMins = new float[colCount];
-        _columnMaxes = new float[colCount];
+        if (_sortStack.Count == 0) return;
 
-        for (int c = 0; c < colCount; c++)
+        _filteredRows.Sort((a, b) =>
         {
-            if (!_activeColumns.Contains(c))
+            for (int i = 0; i < _sortStack.Count; i++)
             {
-                _columnMins[c] = 0f;
-                _columnMaxes[c] = 1f;
-                continue;
+                SortCriterion crit = _sortStack[i];
+                int cmp = CompareByField(a, b, crit.Field);
+                if (cmp != 0)
+                    return crit.Direction == SortDirection.Ascending ? cmp : -cmp;
             }
+            return a.OriginalIndex.CompareTo(b.OriginalIndex);
+        });
+    }
 
-            float min = float.MaxValue;
-            float max = float.MinValue;
-
-            for (int r = 0; r < _filteredRows.Count; r++)
-            {
-                float val = _filteredRows[r].NumericValues[c];
-                if (val < min) min = val;
-                if (val > max) max = val;
-            }
-
-            if (_filteredRows.Count == 0) { min = 0f; max = 1f; }
-            else if (Mathf.Approximately(min, max)) { max = min + 1f; }
-
-            _columnMins[c] = min;
-            _columnMaxes[c] = max;
+    private static int CompareByField(DataRow a, DataRow b, string field)
+    {
+        switch (field)
+        {
+            case SortFieldIndustry:
+                return string.Compare(a.Industry ?? "", b.Industry ?? "", System.StringComparison.OrdinalIgnoreCase);
+            case SortFieldYear:
+                int yearA = ParseInt(a.Year);
+                int yearB = ParseInt(b.Year);
+                return yearA.CompareTo(yearB);
+            case SortFieldCountry:
+                return string.Compare(ResolveCountryName(a.CountryCode), ResolveCountryName(b.CountryCode), System.StringComparison.OrdinalIgnoreCase);
+            default:
+                return 0;
         }
     }
 
-    public float GetNormalizedValue(int rowIndex, int colIndex)
+    private static string ResolveCountryName(string code)
     {
-        if (rowIndex >= _filteredRows.Count || colIndex >= _numericColumnNames.Count)
-            return 0f;
-
-        float raw = _filteredRows[rowIndex].NumericValues[colIndex];
-        float min = _columnMins[colIndex];
-        float max = _columnMaxes[colIndex];
-
-        return (raw - min) / (max - min);
-    }
-
-    public float GetRawValue(int rowIndex, int colIndex)
-    {
-        if (rowIndex >= _filteredRows.Count || colIndex >= _numericColumnNames.Count)
-            return 0f;
-        return _filteredRows[rowIndex].NumericValues[colIndex];
-    }
-
-    public (float min, float max) GetColumnRange(int colIndex)
-    {
-        return (_columnMins[colIndex], _columnMaxes[colIndex]);
+        if (string.IsNullOrEmpty(code)) return "";
+        return CountryNames.GetFullName(code);
     }
 
     private static float ParseFloat(string value)

@@ -42,33 +42,28 @@ public class FilterPanelBuilder
         "ISR", "LBR", "MHL", "NLD", "USA", "VGB"
     };
 
-    private static readonly string[] TabNames = { "Columns", "Industries", "Years", "Countries" };
+    private static string[] TabNames => FilterPanelConstants.TabLabels;
 
-    private static readonly Dictionary<string, string> CountryFullNames = new Dictionary<string, string>
-    {
-        { "BMU", "Bermuda" },
-        { "CAN", "Canada" },
-        { "CUW", "Curacao" },
-        { "CYM", "Cayman Islands" },
-        { "GBR", "United Kingdom" },
-        { "IRL", "Ireland" },
-        { "ISR", "Israel" },
-        { "LBR", "Liberia" },
-        { "MHL", "Marshall Islands" },
-        { "NLD", "Netherlands" },
-        { "USA", "United States of America" },
-        { "VGB", "British Virgin Islands" }
+    private static readonly (string key, string label)[] SurfaceToggles = {
+        ("Student", "Student Surface"),
+        ("Solution", "Solution Surface"),
+        ("Error", "Error Surface")
     };
 
+    private const float CanvasWidth = 502f;
+    private const float PrimaryPanelHeight = 602f;
+    private const float SecondaryPanelHeight = 222f;
+    private const float PanelGap = 16f;
+    private const float CanvasHeight = PrimaryPanelHeight + PanelGap + SecondaryPanelHeight;
+
     private static readonly Color PanelBg = new Color(0.07f, 0.086f, 0.118f, 0.92f);
-    private static readonly Color PanelBorder = new Color(0f, 0.82f, 0.9f, 0.23f);
+    private static readonly Color PanelBorder = new Color(0f, 0.82f, 0.9f, 0.45f);
     private static readonly Color TitleBarBg = new Color(0.098f, 0.118f, 0.157f, 0.95f);
     private static readonly Color TitleText = new Color(0.91f, 0.92f, 0.94f, 1f);
     private static readonly Color DividerColor = new Color(1f, 1f, 1f, 0.055f);
 
     private static readonly Color TabActiveText = new Color(0f, 0.82f, 0.9f, 1f);
     private static readonly Color TabActiveBg = new Color(0f, 0.82f, 0.9f, 0.046f);
-    private static readonly Color TabActiveBar = new Color(0f, 0.82f, 0.9f, 1f);
     private static readonly Color TabInactiveText = new Color(0.42f, 0.44f, 0.52f, 1f);
 
     private static readonly Color ResetBg = new Color(0.92f, 0.63f, 0.2f, 0.11f);
@@ -151,16 +146,58 @@ public class FilterPanelBuilder
         GameObject root = new GameObject("FilterPanel");
         Undo.RegisterCreatedObjectUndo(root, "Build Filter Panel");
 
+        FilterPanelUI panelUI = root.AddComponent<FilterPanelUI>();
+        WireFilterPanelReferences(panelUI);
+
         GameObject canvasObj = CreateCanvas(root);
-        GameObject borderObj = CreatePanelBorder(canvasObj);
+
+        GameObject primaryPanel = CreatePanelArea(canvasObj, "PrimaryPanel", true, PrimaryPanelHeight);
+        GameObject borderObj = CreatePanelBorder(primaryPanel);
         GameObject panelRoot = CreatePanelRoot(borderObj);
         CreateTitleBar(panelRoot);
         CreateTabBar(panelRoot);
         CreateDivider(panelRoot);
         CreateTabContents(panelRoot);
 
+        GameObject secondaryPanel = CreatePanelArea(canvasObj, "SecondaryPanel", false, SecondaryPanelHeight);
+        GameObject surfaceBorder = CreateSurfacePanelBorder(secondaryPanel);
+        GameObject surfacePanelRoot = CreateSurfacePanelRoot(surfaceBorder);
+        CreateSurfaceTitleBar(surfacePanelRoot);
+        CreateDivider(surfacePanelRoot);
+        CreateSurfaceToggleSection(surfacePanelRoot);
+
         Selection.activeGameObject = root;
         Debug.Log("[FilterPanelBuilder] Filter panel built successfully.");
+    }
+
+    private static void WireFilterPanelReferences(FilterPanelUI panelUI)
+    {
+        SurfaceFilterController controller = Object.FindObjectOfType<SurfaceFilterController>();
+        if (controller != null)
+        {
+            SerializedObject so = new SerializedObject(panelUI);
+            SerializedProperty controllerProp = so.FindProperty("filterController");
+            if (controllerProp != null) controllerProp.objectReferenceValue = controller;
+
+            AssignSurface(so, "studentSurface", "StudentSurface");
+            AssignSurface(so, "solutionSurface", "SolutionSurface");
+            AssignSurface(so, "errorSurface", "ErrorSurface");
+
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+        else
+        {
+            Debug.LogWarning("[FilterPanelBuilder] No SurfaceFilterController found in scene; leave FilterPanelUI.filterController unassigned until one exists.");
+        }
+    }
+
+    private static void AssignSurface(SerializedObject so, string fieldName, string gameObjectName)
+    {
+        SerializedProperty prop = so.FindProperty(fieldName);
+        if (prop == null) return;
+
+        GameObject found = GameObject.Find(gameObjectName);
+        if (found != null) prop.objectReferenceValue = found;
     }
 
     private static GameObject CreateCanvas(GameObject root)
@@ -172,7 +209,8 @@ public class FilterPanelBuilder
         canvas.renderMode = RenderMode.WorldSpace;
 
         RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
-        canvasRect.sizeDelta = new Vector2(500f, 600f);
+        canvasRect.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
+        canvasRect.pivot = new Vector2(0.5f, 1f);
         canvasRect.localScale = Vector3.one * 0.001f;
 
         CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
@@ -199,6 +237,132 @@ public class FilterPanelBuilder
         return borderObj;
     }
 
+    private static GameObject CreatePanelArea(GameObject canvasObj, string name, bool anchorTop, float height)
+    {
+        GameObject area = new GameObject(name);
+        area.transform.SetParent(canvasObj.transform, false);
+
+        RectTransform rect = area.AddComponent<RectTransform>();
+        if (anchorTop)
+        {
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+        }
+        else
+        {
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+        }
+        rect.sizeDelta = new Vector2(0f, height);
+        rect.anchoredPosition = Vector2.zero;
+
+        return area;
+    }
+
+    private static GameObject CreateSurfacePanelBorder(GameObject canvasObj)
+    {
+        GameObject borderObj = new GameObject("SurfacePanelBorder");
+        borderObj.transform.SetParent(canvasObj.transform, false);
+
+        RectTransform rect = borderObj.AddComponent<RectTransform>();
+        StretchFull(rect);
+
+        Image img = borderObj.AddComponent<Image>();
+        img.sprite = GetRoundedSprite();
+        img.type = Image.Type.Sliced;
+        img.color = PanelBorder;
+
+        return borderObj;
+    }
+
+    private static GameObject CreateSurfacePanelRoot(GameObject borderObj)
+    {
+        GameObject panelRoot = new GameObject("SurfacePanelRoot");
+        panelRoot.transform.SetParent(borderObj.transform, false);
+
+        RectTransform rect = panelRoot.AddComponent<RectTransform>();
+        StretchFull(rect);
+        rect.offsetMin = new Vector2(2f, 2f);
+        rect.offsetMax = new Vector2(-2f, -2f);
+
+        Image img = panelRoot.AddComponent<Image>();
+        img.sprite = GetRoundedSprite();
+        img.type = Image.Type.Sliced;
+        img.color = PanelBg;
+
+        Mask mask = panelRoot.AddComponent<Mask>();
+        mask.showMaskGraphic = true;
+
+        VerticalLayoutGroup vlg = panelRoot.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = 0f;
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = true;
+
+        return panelRoot;
+    }
+
+    private static void CreateSurfaceTitleBar(GameObject panelRoot)
+    {
+        GameObject titleBar = new GameObject("SurfaceTitleBar");
+        titleBar.transform.SetParent(panelRoot.transform, false);
+        titleBar.AddComponent<RectTransform>();
+
+        LayoutElement le = titleBar.AddComponent<LayoutElement>();
+        le.minHeight = 48f;
+        le.preferredHeight = 48f;
+        le.flexibleHeight = 0f;
+
+        Image bg = titleBar.AddComponent<Image>();
+        bg.color = TitleBarBg;
+
+        HorizontalLayoutGroup hlg = titleBar.AddComponent<HorizontalLayoutGroup>();
+        hlg.padding = new RectOffset(16, 10, 8, 8);
+        hlg.spacing = 8f;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = true;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+        hlg.childAlignment = TextAnchor.MiddleLeft;
+
+        CreateTextElement(titleBar.transform, "Title", "Surfaces", 16f, FontStyles.Bold, TitleText, TextAlignmentOptions.MidlineLeft, 120f);
+
+        GameObject spacer = new GameObject("Spacer");
+        spacer.transform.SetParent(titleBar.transform, false);
+        spacer.AddComponent<RectTransform>();
+        LayoutElement spacerLE = spacer.AddComponent<LayoutElement>();
+        spacerLE.flexibleWidth = 1f;
+
+        CreatePillButton(titleBar.transform, "Reset All", ResetBg, ResetBorder, ResetText, 80f);
+    }
+
+    private static void CreateSurfaceToggleSection(GameObject panelRoot)
+    {
+        GameObject section = new GameObject("SurfaceToggles");
+        section.transform.SetParent(panelRoot.transform, false);
+        section.AddComponent<RectTransform>();
+
+        LayoutElement le = section.AddComponent<LayoutElement>();
+        le.flexibleHeight = 1f;
+
+        VerticalLayoutGroup vlg = section.AddComponent<VerticalLayoutGroup>();
+        vlg.spacing = 6f;
+        vlg.padding = new RectOffset(12, 12, 8, 12);
+        vlg.childForceExpandWidth = true;
+        vlg.childForceExpandHeight = false;
+        vlg.childControlWidth = true;
+        vlg.childControlHeight = true;
+
+        for (int i = 0; i < SurfaceToggles.Length; i++)
+        {
+            (string key, string label) = SurfaceToggles[i];
+            CreateToggleRow(section.transform, label, key, false);
+        }
+    }
+
     private static GameObject CreatePanelRoot(GameObject borderObj)
     {
         GameObject panelRoot = new GameObject("PanelRoot");
@@ -206,13 +370,16 @@ public class FilterPanelBuilder
 
         RectTransform rect = panelRoot.AddComponent<RectTransform>();
         StretchFull(rect);
-        rect.offsetMin = new Vector2(1f, 1f);
-        rect.offsetMax = new Vector2(-1f, -1f);
+        rect.offsetMin = new Vector2(2f, 2f);
+        rect.offsetMax = new Vector2(-2f, -2f);
 
         Image img = panelRoot.AddComponent<Image>();
         img.sprite = GetRoundedSprite();
         img.type = Image.Type.Sliced;
         img.color = PanelBg;
+
+        Mask mask = panelRoot.AddComponent<Mask>();
+        mask.showMaskGraphic = true;
 
         VerticalLayoutGroup vlg = panelRoot.AddComponent<VerticalLayoutGroup>();
         vlg.spacing = 0f;
@@ -247,7 +414,7 @@ public class FilterPanelBuilder
         hlg.childControlHeight = true;
         hlg.childAlignment = TextAnchor.MiddleLeft;
 
-        CreateTextElement(titleBar.transform, "Title", "Data filters", 16f, FontStyles.Bold, TitleText, TextAlignmentOptions.MidlineLeft, 120f);
+        CreateTextElement(titleBar.transform, "Title", "Filters", 16f, FontStyles.Bold, TitleText, TextAlignmentOptions.MidlineLeft, 120f);
 
         GameObject spacer = new GameObject("Spacer");
         spacer.transform.SetParent(titleBar.transform, false);
@@ -255,8 +422,7 @@ public class FilterPanelBuilder
         LayoutElement spacerLE = spacer.AddComponent<LayoutElement>();
         spacerLE.flexibleWidth = 1f;
 
-        CreatePillButton(titleBar.transform, "Reset all", ResetBg, ResetBorder, ResetText, 80f);
-        CreatePillButton(titleBar.transform, "X", CloseBg, CloseBg, CloseText, 32f, 16f, FontStyles.Bold);
+        CreatePillButton(titleBar.transform, "Reset All", ResetBg, ResetBorder, ResetText, 80f);
     }
 
     private static void CreateTabBar(GameObject panelRoot)
@@ -266,56 +432,79 @@ public class FilterPanelBuilder
         tabBar.AddComponent<RectTransform>();
 
         LayoutElement le = tabBar.AddComponent<LayoutElement>();
-        le.minHeight = 40f;
-        le.preferredHeight = 40f;
+        le.minHeight = 48f;
+        le.preferredHeight = 48f;
         le.flexibleHeight = 0f;
 
         HorizontalLayoutGroup hlg = tabBar.AddComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 0f;
+        hlg.spacing = 4f;
+        hlg.padding = new RectOffset(6, 6, 4, 4);
         hlg.childForceExpandWidth = true;
         hlg.childForceExpandHeight = true;
         hlg.childControlWidth = true;
         hlg.childControlHeight = true;
 
         for (int i = 0; i < TabNames.Length; i++)
-            CreateTabButton(tabBar.transform, TabNames[i], i == 0);
+            CreateTabButton(tabBar.transform, TabNames[i]);
     }
 
-    private static void CreateTabButton(Transform parent, string label, bool isActive)
+    private static void CreateTabButton(Transform parent, string label)
     {
         GameObject tabObj = new GameObject($"Tab_{label}");
         tabObj.transform.SetParent(parent, false);
         tabObj.AddComponent<RectTransform>();
 
         Image bg = tabObj.AddComponent<Image>();
-        bg.color = isActive ? TabActiveBg : Color.clear;
+        bg.sprite = GetRoundedSprite();
+        bg.type = Image.Type.Sliced;
+        bg.color = new Color(1f, 1f, 1f, 0f);
 
-        tabObj.AddComponent<Button>().transition = Selectable.Transition.None;
+        Button btn = tabObj.AddComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        btn.targetGraphic = bg;
+
+        GameObject innerObj = new GameObject("Inner");
+        innerObj.transform.SetParent(tabObj.transform, false);
+
+        RectTransform innerRect = innerObj.AddComponent<RectTransform>();
+        StretchFull(innerRect);
+        innerRect.offsetMin = new Vector2(1f, 1f);
+        innerRect.offsetMax = new Vector2(-1f, -1f);
+
+        Image innerBg = innerObj.AddComponent<Image>();
+        innerBg.sprite = GetRoundedSprite();
+        innerBg.type = Image.Type.Sliced;
+        innerBg.color = BulkBtnBg;
+        innerBg.raycastTarget = false;
 
         GameObject textObj = new GameObject("Text");
         textObj.transform.SetParent(tabObj.transform, false);
 
         RectTransform textRect = textObj.AddComponent<RectTransform>();
         StretchFull(textRect);
+        textRect.offsetMin = new Vector2(10f, 0f);
+        textRect.offsetMax = new Vector2(-10f, 0f);
 
         TextMeshProUGUI text = textObj.AddComponent<TextMeshProUGUI>();
         text.text = label;
-        text.fontSize = 13f;
-        text.color = isActive ? TabActiveText : TabInactiveText;
-        text.fontStyle = isActive ? FontStyles.Bold : FontStyles.Normal;
+        text.fontSize = 14f;
+        text.color = BulkBtnText;
+        text.fontStyle = FontStyles.Normal;
         text.alignment = TextAlignmentOptions.Center;
+        text.raycastTarget = false;
+    }
 
-        GameObject underline = new GameObject("Underline");
-        underline.transform.SetParent(tabObj.transform, false);
-
-        RectTransform underRect = underline.AddComponent<RectTransform>();
-        underRect.anchorMin = new Vector2(0.1f, 0f);
-        underRect.anchorMax = new Vector2(0.9f, 0f);
-        underRect.pivot = new Vector2(0.5f, 0f);
-        underRect.sizeDelta = new Vector2(0f, 2f);
-
-        Image underImg = underline.AddComponent<Image>();
-        underImg.color = isActive ? TabActiveBar : Color.clear;
+    private static void ConfigureTintColors(Button btn, Color normal, Color pressed)
+    {
+        ColorBlock colors = btn.colors;
+        colors.normalColor = normal;
+        colors.highlightedColor = normal;
+        colors.pressedColor = pressed;
+        colors.selectedColor = normal;
+        colors.disabledColor = new Color(normal.r, normal.g, normal.b, normal.a * 0.5f);
+        colors.colorMultiplier = 1f;
+        colors.fadeDuration = 0.08f;
+        btn.colors = colors;
     }
 
     private static void CreateDivider(GameObject panelRoot)
@@ -335,15 +524,15 @@ public class FilterPanelBuilder
 
     private static void CreateTabContents(GameObject panelRoot)
     {
-        CreateToggleTab(panelRoot, "ColumnsContent", NumericColumns, true);
-        CreateToggleTab(panelRoot, "IndustriesContent", Industries, false);
-        CreateToggleTab(panelRoot, "YearsContent", Years, false);
+        CreateToggleTab(panelRoot, "ColumnsContent", NumericColumns, true, includeSort: false);
+        CreateToggleTab(panelRoot, "IndustriesContent", Industries, false, includeSort: true);
+        CreateToggleTab(panelRoot, "YearsContent", Years, false, includeSort: true);
 
-        string[] countryDisplayNames = System.Array.ConvertAll(Countries, c => CountryFullNames.TryGetValue(c, out string n) ? n : c);
-        CreateToggleTab(panelRoot, "CountriesContent", Countries, false, countryDisplayNames);
+        string[] countryDisplayNames = System.Array.ConvertAll(Countries, c => CountryNames.GetFullName(c));
+        CreateToggleTab(panelRoot, "CountriesContent", Countries, false, includeSort: true, displayNames: countryDisplayNames);
     }
 
-    private static void CreateToggleTab(GameObject panelRoot, string name, string[] items, bool visible, string[] displayNames = null)
+    private static void CreateToggleTab(GameObject panelRoot, string name, string[] items, bool visible, bool includeSort, string[] displayNames = null)
     {
         GameObject container = new GameObject(name);
         container.transform.SetParent(panelRoot.transform, false);
@@ -361,7 +550,7 @@ public class FilterPanelBuilder
 
         container.SetActive(visible);
 
-        CreateBulkButtons(container.transform);
+        CreateBulkButtons(container.transform, includeSort);
 
         GameObject scrollObj = new GameObject("ScrollView");
         scrollObj.transform.SetParent(container.transform, false);
@@ -425,7 +614,7 @@ public class FilterPanelBuilder
         }
     }
 
-    private static void CreateBulkButtons(Transform contentParent)
+    private static void CreateBulkButtons(Transform contentParent, bool includeSort)
     {
         GameObject row = new GameObject("BulkButtons");
         row.transform.SetParent(contentParent, false);
@@ -438,17 +627,23 @@ public class FilterPanelBuilder
 
         HorizontalLayoutGroup hlg = row.AddComponent<HorizontalLayoutGroup>();
         hlg.spacing = 8f;
-        hlg.padding = new RectOffset(0, 0, 8, 8);
+        hlg.padding = new RectOffset(12, 12, 8, 8);
         hlg.childForceExpandWidth = false;
         hlg.childForceExpandHeight = true;
         hlg.childControlWidth = true;
         hlg.childControlHeight = true;
 
-        CreateBulkButton(row.transform, "Select all", 110f);
-        CreateBulkButton(row.transform, "Deselect all", 110f);
+        const float buttonWidth = 112.5f;
+        CreateBulkButton(row.transform, "Select All", buttonWidth, flashOnPress: true);
+        CreateBulkButton(row.transform, "Deselect All", buttonWidth, flashOnPress: true);
+        if (includeSort)
+        {
+            CreateBulkButton(row.transform, "Sort Ascending", buttonWidth, flashOnPress: false);
+            CreateBulkButton(row.transform, "Sort Descending", buttonWidth, flashOnPress: false);
+        }
     }
 
-    private static void CreateBulkButton(Transform parent, string label, float width)
+    private static void CreateBulkButton(Transform parent, string label, float width, bool flashOnPress)
     {
         GameObject btnObj = new GameObject(label);
         btnObj.transform.SetParent(parent, false);
@@ -460,9 +655,19 @@ public class FilterPanelBuilder
         Image bg = btnObj.AddComponent<Image>();
         bg.sprite = GetRoundedSprite();
         bg.type = Image.Type.Sliced;
-        bg.color = BulkBtnBorder;
+        bg.color = flashOnPress ? Color.white : BulkBtnBorder;
 
-        btnObj.AddComponent<Button>().transition = Selectable.Transition.None;
+        Button btn = btnObj.AddComponent<Button>();
+        btn.targetGraphic = bg;
+        if (flashOnPress)
+        {
+            btn.transition = Selectable.Transition.ColorTint;
+            ConfigureTintColors(btn, BulkBtnBorder, new Color(0f, 0.82f, 0.9f, 0.7f));
+        }
+        else
+        {
+            btn.transition = Selectable.Transition.None;
+        }
 
         GameObject innerObj = new GameObject("Inner");
         innerObj.transform.SetParent(btnObj.transform, false);
@@ -606,9 +811,13 @@ public class FilterPanelBuilder
         Image btnBg = btnObj.AddComponent<Image>();
         btnBg.sprite = GetRoundedSprite();
         btnBg.type = Image.Type.Sliced;
-        btnBg.color = bg;
+        btnBg.color = Color.white;
 
-        btnObj.AddComponent<Button>().transition = Selectable.Transition.None;
+        Button btn = btnObj.AddComponent<Button>();
+        btn.transition = Selectable.Transition.ColorTint;
+        btn.targetGraphic = btnBg;
+        Color pressed = new Color(bg.r, bg.g, bg.b, Mathf.Min(1f, bg.a + 0.45f));
+        ConfigureTintColors(btn, bg, pressed);
 
         GameObject textObj = new GameObject("Text");
         textObj.transform.SetParent(btnObj.transform, false);

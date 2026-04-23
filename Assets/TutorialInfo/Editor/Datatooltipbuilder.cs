@@ -15,7 +15,13 @@ public class DataTooltipBuilder
     private static readonly Color AccentColor = new Color(0f, 0.82f, 0.9f, 1f);
     private static readonly Color PrimaryText = new Color(0.91f, 0.92f, 0.94f, 1f);
     private static readonly Color SecondaryText = new Color(0.42f, 0.44f, 0.52f, 1f);
+    private static readonly Color BreadcrumbText = new Color(0.6f, 0.64f, 0.72f, 1f);
     private static readonly Color DividerColor = new Color(1f, 1f, 1f, 0.055f);
+
+    private const float CanvasWidth = 320f;
+    private const float CanvasHeight = 260f;
+    private const float LeftPad = 14f;
+    private const float ContentWidth = 292f;
 
     private static Sprite _roundedSprite;
 
@@ -75,40 +81,24 @@ public class DataTooltipBuilder
 
         GameObject root = new GameObject("DataTooltip");
         Undo.RegisterCreatedObjectUndo(root, "Build Data Tooltip");
+        root.AddComponent<DataTooltipUI>();
 
         GameObject canvasObj = CreateCanvas(root);
         GameObject borderObj = CreatePanelBorder(canvasObj);
         GameObject panelObj = CreatePanelRoot(borderObj);
+        RectTransform panelRect = panelObj.GetComponent<RectTransform>();
 
-        float y = -12f;
-        float leftPad = 14f;
-        float contentWidth = 292f;
+        CreateSwatch(panelRect, LeftPad, -12f);
 
-        CreateSwatch(panelObj.GetComponent<RectTransform>(), leftPad, y);
+        GameObject cellGroup = CreateGroup(panelRect, "CellGroup");
+        PopulateCellGroup(cellGroup.GetComponent<RectTransform>());
 
-        CreateText(panelObj.GetComponent<RectTransform>(), "Ticker", "AAPL",
-            leftPad + 30f, y, contentWidth - 30f, 24f, 16f, PrimaryText, FontStyles.Bold);
-        y -= 24f;
-
-        CreateText(panelObj.GetComponent<RectTransform>(), "Company", "Apple Inc.",
-            leftPad, y, contentWidth, 20f, 12f, SecondaryText, FontStyles.Normal);
-        y -= 26f;
-
-        CreateDivider(panelObj.GetComponent<RectTransform>(), leftPad, y, contentWidth);
-        y -= 10f;
-
-        CreateLabeledRow(panelObj.GetComponent<RectTransform>(), "Industry", "IndustryValue", "Manufacturing", leftPad, ref y, contentWidth);
-        CreateLabeledRow(panelObj.GetComponent<RectTransform>(), "Country", "CountryValue", "USA", leftPad, ref y, contentWidth);
-        CreateLabeledRow(panelObj.GetComponent<RectTransform>(), "Year", "YearValue", "2020", leftPad, ref y, contentWidth);
-
-        CreateDivider(panelObj.GetComponent<RectTransform>(), leftPad, y, contentWidth);
-        y -= 10f;
-
-        CreateLabeledRow(panelObj.GetComponent<RectTransform>(), "Metric", "ColumnValue", "Total Assets", leftPad, ref y, contentWidth);
-        CreateLabeledRow(panelObj.GetComponent<RectTransform>(), "Value", "ValueValue", "1.2 billion", leftPad, ref y, contentWidth);
+        GameObject sectionGroup = CreateGroup(panelRect, "SectionGroup");
+        PopulateSectionGroup(sectionGroup.GetComponent<RectTransform>());
+        sectionGroup.SetActive(false);
 
         Selection.activeGameObject = root;
-        Debug.Log("[DataTooltipBuilder] Data tooltip built successfully.");
+        Debug.Log("[DataTooltipBuilder] Data tooltip built successfully. Remember to wire DataInspector.tooltip and SurfacePinManager.tooltip.");
     }
 
     private static GameObject CreateCanvas(GameObject root)
@@ -121,7 +111,7 @@ public class DataTooltipBuilder
         canvas.sortingOrder = 10;
 
         RectTransform canvasRect = canvasObj.GetComponent<RectTransform>();
-        canvasRect.sizeDelta = new Vector2(320f, 260f);
+        canvasRect.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
         canvasRect.localScale = Vector3.one * 0.001f;
 
         CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
@@ -166,6 +156,68 @@ public class DataTooltipBuilder
         return panelRoot;
     }
 
+    private static GameObject CreateGroup(RectTransform parent, string name)
+    {
+        GameObject group = new GameObject(name);
+        group.transform.SetParent(parent, false);
+
+        RectTransform rect = group.AddComponent<RectTransform>();
+        StretchFull(rect);
+
+        return group;
+    }
+
+    private static void PopulateCellGroup(RectTransform parent)
+    {
+        float y = -12f;
+
+        CreateText(parent, "Ticker", "AAPL",
+            LeftPad + 30f, y, ContentWidth - 30f, 24f, 16f, PrimaryText, FontStyles.Bold);
+        y -= 24f;
+
+        CreateText(parent, "Company", "Apple Inc.",
+            LeftPad, y, ContentWidth, 20f, 12f, SecondaryText, FontStyles.Normal);
+        y -= 26f;
+
+        CreateDivider(parent, LeftPad, y, ContentWidth);
+        y -= 10f;
+
+        CreateLabeledRow(parent, "Industry", "IndustryValue", "Manufacturing", LeftPad, ref y, ContentWidth);
+        CreateLabeledRow(parent, "Country", "CountryValue", "USA", LeftPad, ref y, ContentWidth);
+        CreateLabeledRow(parent, "Year", "YearValue", "2020", LeftPad, ref y, ContentWidth);
+
+        CreateDivider(parent, LeftPad, y, ContentWidth);
+        y -= 10f;
+
+        CreateLabeledRow(parent, "Metric", "ColumnValue", "Total Assets", LeftPad, ref y, ContentWidth);
+        CreateLabeledRow(parent, "Value", "ValueValue", "1.2 billion", LeftPad, ref y, ContentWidth);
+    }
+
+    private static void PopulateSectionGroup(RectTransform parent)
+    {
+        float y = -12f;
+
+        CreateText(parent, "SectionTitle", "Section",
+            LeftPad + 30f, y, ContentWidth - 30f, 24f, 16f, PrimaryText, FontStyles.Bold, wrap: true);
+        y -= 24f;
+
+        CreateText(parent, "SectionValue", "Value",
+            LeftPad, y, ContentWidth, 20f, 12f, SecondaryText, FontStyles.Normal, wrap: true);
+        y -= 26f;
+
+        CreateText(parent, "SectionBreadcrumb", "",
+            LeftPad, y, ContentWidth, 18f, 11f, BreadcrumbText, FontStyles.Italic, wrap: true);
+        y -= 22f;
+
+        CreateDivider(parent, LeftPad, y, ContentWidth);
+        y -= 10f;
+
+        CreateLabeledRow(parent, "Rows", "SectionRowCount", "0", LeftPad, ref y, ContentWidth);
+        CreateLabeledRow(parent, "Minimum", "SectionMin", "0", LeftPad, ref y, ContentWidth);
+        CreateLabeledRow(parent, "Maximum", "SectionMax", "0", LeftPad, ref y, ContentWidth);
+        CreateLabeledRow(parent, "Average", "SectionAverage", "0", LeftPad, ref y, ContentWidth);
+    }
+
     private static void CreateSwatch(RectTransform parent, float x, float y)
     {
         GameObject obj = new GameObject("ColorSwatch");
@@ -186,7 +238,7 @@ public class DataTooltipBuilder
 
     private static void CreateText(RectTransform parent, string name, string placeholder,
         float x, float y, float width, float height, float fontSize,
-        Color color, FontStyles style)
+        Color color, FontStyles style, bool wrap = false)
     {
         GameObject obj = new GameObject(name);
         obj.transform.SetParent(parent, false);
@@ -196,9 +248,10 @@ public class DataTooltipBuilder
         tmp.fontSize = fontSize;
         tmp.color = color;
         tmp.fontStyle = style;
-        tmp.alignment = TextAlignmentOptions.Left;
-        tmp.overflowMode = TextOverflowModes.Ellipsis;
-        tmp.enableWordWrapping = false;
+        tmp.alignment = wrap ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.Left;
+        tmp.overflowMode = wrap ? TextOverflowModes.Overflow : TextOverflowModes.Ellipsis;
+        tmp.enableWordWrapping = wrap;
+        tmp.raycastTarget = false;
 
         RectTransform rect = obj.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0f, 1f);
@@ -215,6 +268,7 @@ public class DataTooltipBuilder
 
         Image img = obj.AddComponent<Image>();
         img.color = DividerColor;
+        img.raycastTarget = false;
 
         RectTransform rect = obj.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0f, 1f);

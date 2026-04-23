@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Google.GenAI;
 using Google.GenAI.Types;
@@ -9,8 +10,11 @@ public static class Gemini {
 
     private static AsyncSession session;
     private static Client client;
-    private static Blob blob;
-    
+    private static readonly SemaphoreSlim sendLock = new SemaphoreSlim(1, 1);
+    private static CancellationTokenSource loopCts;
+    private static Task loopTask;
+    private static bool initialized;
+
     public static async Task init() {
         try {
             client = new Client(apiKey: "");
@@ -36,63 +40,90 @@ public static class Gemini {
             Debug.Log("spkr init");
             voip.init();
             Debug.Log("voip init");
-            blob = new Blob
-            {
-                MimeType = "audio/pcm;rate=16000",
-                Data = null
-            };
             voip.turret += sendTick;
-        } 
-        catch (Exception e) {
-            Debug.LogError(e);
-        }
-    }
-    
-    public static async void destroy() {
-        try {
-            await session.CloseAsync();
-            spkr.destroy();
-            voip.destroy();
-            voip.turret -= sendTick;
-        }
-        catch (Exception e) {
-            Debug.LogError(e);
-        }
-    }
-    
-    private static async void sendTick(byte[] data) {
-        Debug.Log("[Gemini] streaming audio");
-        try {
-            blob.Data = data;
-            await session.SendRealtimeInputAsync(new LiveSendRealtimeInputParameters
-            {
-                Audio = blob
-            });
+            initialized = true;
         }
         catch (Exception e) {
             Debug.LogError(e);
         }
     }
 
-    private static async Task receiveLoop() {
+    public static async void destroy() {
+        await destroyAsync();
+    }
+
+    public static async Task destroyAsync() {
+        if (!initialized) return;
+        initialized = false;
+
+        voip.turret -= sendTick;
+
         try {
-            while (true) {
+            loopCts?.Cancel();
+        } catch (Exception e) { Debug.LogError(e); }
+
+        try {
+            if (session != null) await session.CloseAsync();
+        } catch (Exception e) { Debug.LogError(e); }
+        session = null;
+
+        try {
+            if (loopTask != null) await loopTask;
+        } catch (Exception) { /* expected on cancel/close */ }
+        loopTask = null;
+
+        try {
+            spkr.destroy();
+        } catch (Exception e) { Debug.LogError(e); }
+
+        try {
+            voip.destroy();
+        } catch (Exception e) { Debug.LogError(e); }
+
+        loopCts?.Dispose();
+        loopCts = null;
+    }
+
+    private static async void sendTick(byte[] data) {
+        if (session == null || data == null || data.Length == 0) return;
+
+        await sendLock.WaitAsync();
+        try {
+            if (session == null) return;
+            Blob blob = new Blob {
+                MimeType = "audio/pcm;rate=16000",
+                Data = data
+            };
+            await session.SendRealtimeInputAsync(new LiveSendRealtimeInputParameters {
+                Audio = blob
+            });
+        }
+        catch (Exception e) {
+            Debug.LogError(e);
+        }
+        finally {
+            sendLock.Release();
+        }
+    }
+
+    private static async Task receiveLoop(CancellationToken ct) {
+        try {
+            while (!ct.IsCancellationRequested) {
                 LiveServerMessage response = await session.ReceiveAsync();
                 if (response == null) {
                     Debug.Log("session closed");
                     break;
                 }
                 receiveTick(response);
-                // await Task.Delay(200);
             }
         }
+        catch (OperationCanceledException) { }
         catch (Exception e) {
             Debug.LogError($"receiveLoop fatal: {e}");
         }
-    } 
-    
+    }
+
     private static void receiveTick(LiveServerMessage response) {
-        // --- Top-level message type triage ---
         if (response.SetupComplete != null) {
             Debug.Log("[Gemini] SetupComplete received — session is ready");
             return;
@@ -103,7 +134,6 @@ public static class Gemini {
             return;
         }
 
-        // --- ServerContent block ---
         var serverContent = response.ServerContent;
         if (serverContent == null) {
             Debug.LogWarning("[Gemini] receiveTick: ServerContent is null (unknown message type?)");
@@ -114,17 +144,14 @@ public static class Gemini {
             Debug.Log("[Gemini] interrupt signal");
         }
 
-        // --- InputTranscription (model heard you speak) ---
         if (serverContent.InputTranscription != null) {
             Debug.Log($"[Gemini] InputTranscription (model heard): \"{serverContent.InputTranscription.Text}\"");
         }
 
-        // --- OutputTranscription (what the model is saying) ---
         if (serverContent.OutputTranscription != null) {
             Debug.Log($"[Gemini] OutputTranscription: \"{serverContent.OutputTranscription.Text}\"");
         }
 
-        // --- ModelTurn parts ---
         var parts = serverContent.ModelTurn?.Parts;
         if (parts == null || parts.Count == 0) {
             Debug.Log("[Gemini] ServerContent.ModelTurn.Parts is null/empty — no audio/text payload this tick");
@@ -153,31 +180,18 @@ public static class Gemini {
             }
         }
     }
-    
-    // private static void receiveTick(LiveServerMessage response) {
-    //     Debug.Log("received server response");
-    //     List<Part> parts = response?.ServerContent?.ModelTurn?.Parts;
-    //     if (parts == null) {
-    //         return;
-    //     }
-    //     parts.ForEach(
-    //         (part) => {
-    //             if (part.InlineData?.MimeType?.StartsWith("audio/pcm") == true) {
-    //                 spkr.write(part.InlineData.Data);
-    //             }
-    //         }
-    //     );
-    // }
-    
+
     public static void start() {
+        if (!initialized || session == null) return;
         spkr.start();
         voip.start();
-        _ = receiveLoop();
+        loopCts = new CancellationTokenSource();
+        loopTask = receiveLoop(loopCts.Token);
     }
-    
+
     public static void stop() {
-        spkr.stop();
-        voip.stop();
+        if (!initialized) return;
+        try { spkr.stop(); } catch (Exception e) { Debug.LogError(e); }
+        try { voip.stop(); } catch (Exception e) { Debug.LogError(e); }
     }
-    
 }

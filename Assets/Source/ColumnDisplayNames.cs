@@ -38,11 +38,63 @@ public static class ColumnDisplayNames
         { "Inventory last year",                     "Inventory Last Year" },
         { "Stockholder equity last year",            "Stockholder Equity Last Year" },
         { "Cost of Goods Sold last year",            "Cost of Goods Sold Last Year" },
-        { "Common shares outstanding last year",     "Common shares outstanding last year" }
+        { "Common shares outstanding last year",     "Common Shares Outstanding Last Year" },
+
+        // Case study columns (answer / solution / error surfaces)
+        { "Working capital",                         "Working Capital" },
+        { "Current ratio",                           "Current Ratio" },
+        { "Quick ratio",                             "Quick Ratio (Acid-Test)" },
+        { "Accounts receivable turnover",            "Accounts Receivable Turnover" },
+        { "Average days to collect receivables",     "Days Sales Outstanding (DSO)" },
+        { "Inventory turnover",                      "Inventory Turnover" },
+        { "Average days to collect inventory",       "Days Inventory Outstanding (DIO)" },
+        { "Debt to assets",                          "Debt-to-Assets Ratio" },
+        { "Debt to equity",                          "Debt-to-Equity Ratio" },
+        { "Number of times interest is earned",      "Times Interest Earned (TIE)" },
+        { "Net margin (or return on sales)",         "Net Profit Margin" },
+        { "Asset turnover ratio",                    "Asset Turnover Ratio" },
+        { "Return on investment",                    "Return on Investment (ROI)" },
+        { "Return on equity",                        "Return on Equity (ROE)" },
+        { "Earnings per share",                      "Earnings Per Share (EPS)" },
+        { "Book value per share",                    "Book Value Per Share" },
+        { "Price-Earnings (P/E) ratio",              "Price-to-Earnings (P/E) Ratio" },
+        { "Dividend yield",                          "Dividend Yield" }
+    };
+
+    private static readonly HashSet<string> NonCurrencyColumns = new HashSet<string>
+    {
+        "Environmental",
+        "Social",
+        "Governance",
+        "ESG_score",
+        "Common Shares Outstanding",
+        "Common shares outstanding last year",
+
+        // Case study: ratios, percentages, day-counts — not dollar amounts
+        "Current ratio",
+        "Quick ratio",
+        "Accounts receivable turnover",
+        "Average days to collect receivables",
+        "Inventory turnover",
+        "Average days to collect inventory",
+        "Debt to assets",
+        "Debt to equity",
+        "Number of times interest is earned",
+        "Net margin (or return on sales)",
+        "Asset turnover ratio",
+        "Return on investment",
+        "Return on equity",
+        "Price-Earnings (P/E) ratio",
+        "Dividend yield"
     };
 
     public static string GetDisplayName(string csvHeader)
     {
         return DisplayNames.TryGetValue(csvHeader, out string name) ? name : csvHeader;
+    }
+
+    public static bool IsCurrencyColumn(string csvHeader)
+    {
+        return !string.IsNullOrEmpty(csvHeader) && !NonCurrencyColumns.Contains(csvHeader);
     }
 }
