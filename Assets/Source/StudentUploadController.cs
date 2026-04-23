@@ -15,6 +15,17 @@ public class StudentUploadController : MonoBehaviour
 
     public event System.Action<string> OnStatus;
 
+    void Start()
+    {
+        var payload = QrGateLoader.LastPayload;
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            Report("No QR payload available at startup.");
+            return;
+        }
+        LoadFromUrl(payload);
+    }
+
     public void LoadFromUrl(string url)
     {
         if (IsBusy)
@@ -28,16 +39,6 @@ public class StudentUploadController : MonoBehaviour
             return;
         }
         StartCoroutine(LoadFromUrlCoroutine(url.Trim()));
-    }
-
-    public void LoadFromLocalCsvText(string csvText)
-    {
-        if (string.IsNullOrEmpty(csvText))
-        {
-            Report("Empty CSV text.");
-            return;
-        }
-        PersistAndApply(csvText);
     }
 
     private IEnumerator LoadFromUrlCoroutine(string url)
