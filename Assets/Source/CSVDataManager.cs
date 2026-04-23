@@ -20,6 +20,7 @@ public class CSVDataSource : SurfaceDataSource
     public static CSVDataSource Instance { get; private set; }
 
     public string csvFileName = "Case_Study_Data.csv";
+    public string placeholderCsvFileName = "BigPictureInc.csv";
     public bool loadOnStart = true;
     public bool claimSingleton = true;
 
@@ -30,7 +31,12 @@ public class CSVDataSource : SurfaceDataSource
     public HashSet<string> ActiveYears => _activeYears;
     public HashSet<string> ActiveCountries => _activeCountries;
 
+    public string PlaceholderCompanyName { get; private set; } = "BIG PICTURE, INC";
+    public bool PlaceholderLoaded { get; private set; }
+
     private Dictionary<string, int> _headerIndex = new Dictionary<string, int>();
+    private Dictionary<string, Dictionary<string, float>> _placeholderByKey
+        = new Dictionary<string, Dictionary<string, float>>();
 
     private HashSet<string> _activeIndustries = new HashSet<string>();
     private HashSet<string> _activeYears = new HashSet<string>();
@@ -69,6 +75,8 @@ public class CSVDataSource : SurfaceDataSource
     {
         if (loadOnStart)
             StartCoroutine(LoadFromStreamingAssets(csvFileName));
+        if (!string.IsNullOrEmpty(placeholderCsvFileName))
+            StartCoroutine(LoadPlaceholderFromStreamingAssets(placeholderCsvFileName));
     }
 
     public System.Collections.IEnumerator LoadFromStreamingAssets(string fileName)
@@ -536,6 +544,96 @@ public class CSVDataSource : SurfaceDataSource
     {
         if (string.IsNullOrEmpty(code)) return "";
         return CountryNames.GetFullName(code);
+    }
+
+    public System.Collections.IEnumerator LoadPlaceholderFromStreamingAssets(string fileName)
+    {
+        string path = Path.Combine(Application.streamingAssetsPath, fileName);
+        string url = path.Contains("://") ? path : "file://" + path;
+
+        using (UnityEngine.Networking.UnityWebRequest www = UnityEngine.Networking.UnityWebRequest.Get(url))
+        {
+            yield return www.SendWebRequest();
+
+            if (www.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning($"[CSVDataSource:{name}] Failed to load placeholder CSV '{fileName}': {www.error}");
+                yield break;
+            }
+
+            LoadPlaceholderFromCsvText(www.downloadHandler.text);
+        }
+    }
+
+    public void LoadPlaceholderFromCsvText(string csvText)
+    {
+        _placeholderByKey.Clear();
+
+        string[] lines = csvText.Split(new[] { "\r\n", "\n" }, System.StringSplitOptions.None);
+        if (lines.Length < 2) { PlaceholderLoaded = true; return; }
+
+        List<string> headers = ParseCSVLine(lines[0]);
+        var headerIdx = new Dictionary<string, int>();
+        for (int i = 0; i < headers.Count; i++)
+            headerIdx[headers[i].Trim()] = i;
+
+        for (int i = 1; i < lines.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(lines[i])) continue;
+            List<string> fields = ParseCSVLine(lines[i]);
+            if (fields.Count < headers.Count) continue;
+
+            string year = GetFieldAt(fields, headerIdx, "YEAR");
+            string industry = ResolvePlaceholderIndustry(fields, headerIdx);
+            if (string.IsNullOrEmpty(year) || string.IsNullOrEmpty(industry)) continue;
+
+            string company = GetFieldAt(fields, headerIdx, "Company Name");
+            if (!string.IsNullOrEmpty(company)) PlaceholderCompanyName = company;
+
+            string key = industry + "|" + year;
+            var colMap = new Dictionary<string, float>(headers.Count);
+
+            for (int c = 0; c < headers.Count; c++)
+            {
+                string colName = headers[c].Trim();
+                if (c >= fields.Count) continue;
+                string raw = fields[c];
+                if (string.IsNullOrEmpty(raw)) continue;
+                if (float.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out float v))
+                    colMap[colName] = v;
+            }
+            _placeholderByKey[key] = colMap;
+        }
+
+        PlaceholderLoaded = true;
+        Debug.Log($"[CSVDataSource:{name}] Loaded {_placeholderByKey.Count} placeholder rows (\"{PlaceholderCompanyName}\")");
+    }
+
+    public bool TryGetPlaceholderValue(string industry, string year, string columnName, out float value)
+    {
+        value = 0f;
+        if (!PlaceholderLoaded || string.IsNullOrEmpty(industry) || string.IsNullOrEmpty(year) || string.IsNullOrEmpty(columnName))
+            return false;
+        if (!_placeholderByKey.TryGetValue(industry + "|" + year, out var colMap))
+            return false;
+        return colMap.TryGetValue(columnName, out value);
+    }
+
+    private static string GetFieldAt(List<string> fields, Dictionary<string, int> idx, string columnName)
+    {
+        if (idx.TryGetValue(columnName, out int i) && i < fields.Count)
+            return fields[i].Trim();
+        return "";
+    }
+
+    private static string ResolvePlaceholderIndustry(List<string> fields, Dictionary<string, int> headerIdx)
+    {
+        for (int i = 0; i < _industryFlags.Length; i++)
+        {
+            if (GetFieldAt(fields, headerIdx, _industryFlags[i]) == "1")
+                return _industryFlags[i];
+        }
+        return "";
     }
 
     private static float ParseFloat(string value)

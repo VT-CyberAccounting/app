@@ -105,6 +105,16 @@ public class DataInspector : MonoBehaviour
         float normalizedValue = data.GetNormalizedValue(row, col);
         string columnName = data.NumericColumnNames[col];
 
+        bool hasPlaceholder = false;
+        float placeholderValue = 0f;
+        string placeholderName = null;
+        CSVDataSource csvSource = data as CSVDataSource;
+        if (csvSource != null)
+        {
+            hasPlaceholder = csvSource.TryGetPlaceholderValue(dataRow.Industry, dataRow.Year, columnName, out placeholderValue);
+            placeholderName = csvSource.PlaceholderCompanyName;
+        }
+
         tooltip.ShowCell(
             worldPoint,
             dataRow.Ticker,
@@ -114,7 +124,10 @@ public class DataInspector : MonoBehaviour
             dataRow.Year,
             columnName,
             rawValue,
-            normalizedValue
+            normalizedValue,
+            hasPlaceholder,
+            placeholderValue,
+            placeholderName
         );
     }
 

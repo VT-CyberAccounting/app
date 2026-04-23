@@ -54,6 +54,13 @@ public class DataTooltipUI : MonoBehaviour
     private Color _defaultSwatchColor;
     private bool _hasDefaultSwatchColor;
 
+    private RectTransform _columnLabelRT;
+    private RectTransform _valueLabelRT;
+    private float _columnLabelBaseHeight;
+    private float _valueLabelBaseHeight;
+    private float _valueLabelBaseY;
+    private bool _cellLayoutCached;
+
     private void Awake()
     {
         _canvas = GetComponentInChildren<Canvas>(true);
@@ -99,15 +106,35 @@ public class DataTooltipUI : MonoBehaviour
         _avgLabelRT = GetPreviousSiblingRect(_sectionAverageRT);
         _sectionDividerRT = FindRectInSection("Divider");
 
+        _columnLabelRT = RectOf(_columnLabel);
+        _valueLabelRT = RectOf(_valueLabel);
+
+        EnableWrap(_columnLabel);
+        EnableWrap(_valueLabel);
+        EnableWrap(_companyLabel);
+        EnableWrap(_sectionTitleLabel);
+        EnableWrap(_sectionValueLabel);
+        EnableWrap(_sectionBreadcrumbLabel);
+
         if (_canvas != null)
             _canvas.gameObject.SetActive(false);
     }
 
+    private static void EnableWrap(TextMeshProUGUI label)
+    {
+        if (label == null) return;
+        label.enableWordWrapping = true;
+        label.overflowMode = TextOverflowModes.Overflow;
+    }
+
     public void ShowCell(Vector3 worldHitPoint, string ticker, string companyName,
         string industry, string country, string year,
-        string columnName, float rawValue, float normalizedValue)
+        string columnName, float rawValue, float normalizedValue,
+        bool hasPlaceholder = false, float placeholderValue = 0f, string placeholderName = null)
     {
         SetMode(cellMode: true);
+
+        bool isCurrency = ColumnDisplayNames.IsCurrencyColumn(columnName);
 
         if (_colorSwatch != null) _colorSwatch.color = Heatmap.Sample(normalizedValue);
         if (_tickerLabel != null) _tickerLabel.text = ticker;
@@ -116,10 +143,67 @@ public class DataTooltipUI : MonoBehaviour
         if (_countryLabel != null) _countryLabel.text = CountryNames.GetFullName(country);
         if (_yearLabel != null) _yearLabel.text = year;
         if (_columnLabel != null) _columnLabel.text = ColumnDisplayNames.GetDisplayName(columnName);
-        if (_valueLabel != null) _valueLabel.text = FormatCompactValue(rawValue, ColumnDisplayNames.IsCurrencyColumn(columnName));
+        if (_valueLabel != null)
+        {
+            string cellValue = FormatCompactValue(rawValue, isCurrency);
+            string tickerTag = string.IsNullOrEmpty(ticker) ? "" : ticker.ToUpperInvariant();
+            const string numberColumn = "<pos=5em>";
+            string firstRow = string.IsNullOrEmpty(tickerTag)
+                ? cellValue
+                : $"{tickerTag}{numberColumn}{cellValue}";
+            if (hasPlaceholder)
+            {
+                string peer = FormatCompactValue(placeholderValue, isCurrency);
+                _valueLabel.text = $"{firstRow}\nBPI{numberColumn}{peer}";
+            }
+            else
+            {
+                _valueLabel.text = firstRow;
+            }
+        }
 
-        SetCanvasHeight(CellModeHeight);
+        SetCanvasHeight(CellModeHeight + ReflowCellLabels());
         Present(worldHitPoint);
+    }
+
+    private float ReflowCellLabels()
+    {
+        CacheCellLayout();
+
+        float columnExtra = FitLabel(_columnLabel, _columnLabelRT, _columnLabelBaseHeight);
+
+        if (_valueLabelRT != null)
+        {
+            Vector2 pos = _valueLabelRT.anchoredPosition;
+            _valueLabelRT.anchoredPosition = new Vector2(pos.x, _valueLabelBaseY - columnExtra);
+        }
+
+        float valueExtra = FitLabel(_valueLabel, _valueLabelRT, _valueLabelBaseHeight);
+
+        return columnExtra + valueExtra;
+    }
+
+    private void CacheCellLayout()
+    {
+        if (_cellLayoutCached) return;
+        if (_columnLabelRT != null) _columnLabelBaseHeight = _columnLabelRT.rect.height;
+        if (_valueLabelRT != null)
+        {
+            _valueLabelBaseHeight = _valueLabelRT.rect.height;
+            _valueLabelBaseY = _valueLabelRT.anchoredPosition.y;
+        }
+        _cellLayoutCached = true;
+    }
+
+    private static float FitLabel(TextMeshProUGUI label, RectTransform rt, float baseHeight)
+    {
+        if (label == null || rt == null) return 0f;
+        label.ForceMeshUpdate();
+        float preferred = label.preferredHeight;
+        float height = Mathf.Max(preferred, baseHeight);
+        rt.sizeDelta = new Vector2(rt.sizeDelta.x, height);
+        float extra = height - baseHeight;
+        return extra > 0f ? extra : 0f;
     }
 
     public void ShowColumnSection(Vector3 worldHitPoint, string columnDisplayName,
