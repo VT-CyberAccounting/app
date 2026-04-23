@@ -38436,6 +38436,54 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: 0
   m_LayoutPriority: 1
+--- !u!1 &1729069327
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1729069329}
+  - component: {fileID: 1729069328}
+  m_Layer: 0
+  m_Name: StudentUploadManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1729069328
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1729069327}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9dd72d5cf20b41bf969771d0fd326cb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StudentUploadController
+  dataSource: {fileID: 1166616933}
+  studentSource: {fileID: 1757407972}
+  solutionSource: {fileID: 57435520}
+  savedFileName: student.csv
+--- !u!4 &1729069329
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1729069327}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1744076988
 GameObject:
   m_ObjectHideFlags: 0
@@ -44343,10 +44391,10 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 485031896}
   - {fileID: 1316239756}
   - {fileID: 249154445}
   - {fileID: 1397438969}
-  - {fileID: 485031896}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2080287720
@@ -45027,10 +45075,10 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 1166616935}
   - {fileID: 1757407973}
   - {fileID: 57435521}
   - {fileID: 132662156}
-  - {fileID: 1166616935}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2125133671
@@ -45767,3 +45815,4 @@ SceneRoots:
   - {fileID: 2121657078}
   - {fileID: 1277253915}
   - {fileID: 613494568}
+  - {fileID: 1729069329}

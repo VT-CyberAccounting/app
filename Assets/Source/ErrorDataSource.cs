@@ -8,12 +8,16 @@ public class ErrorDataSource : SurfaceDataSource
     public bool autoRebuild = true;
     public bool useSignedDifference = false;
 
+    public const float MissingRowError = 1f;
+
     private readonly List<string> _sharedColumns = new List<string>();
     private readonly Dictionary<string, int> _answerKeyToIndex = new Dictionary<string, int>();
     private readonly Dictionary<string, int> _answerColIndex = new Dictionary<string, int>();
     private readonly Dictionary<string, int> _solutionColIndex = new Dictionary<string, int>();
     private int[] _answerColMap;
     private int[] _solutionColMap;
+    private float[] _jointMin;
+    private float[] _jointMax;
     private int _cachedSolutionColsHash;
     private int _cachedAnswerColsHash;
 
@@ -59,36 +63,46 @@ public class ErrorDataSource : SurfaceDataSource
         RefreshColumnSchemaIfNeeded();
         if (_sharedColumns.Count == 0)
         {
-            Debug.LogWarning($"[ErrorDataSource:{name}] No shared numeric columns between solution and answer.");
+            Debug.LogWarning($"[ErrorDataSource:{name}] No formula columns shared between solution and answer.");
             ClearAndNotify();
             return;
         }
 
         BuildAnswerIndex();
 
+        List<DataRow> solutionRows = solutionSource.FilteredRows;
+        List<DataRow> answerRows = answerSource.FilteredRows;
+        int sharedCount = _sharedColumns.Count;
+
+        ComputeJointRanges(solutionRows, answerRows, sharedCount);
+
         _allRows.Clear();
         _activeColumns.Clear();
         for (int i = 0; i < _numericColumnNames.Count; i++)
             _activeColumns.Add(i);
 
-        List<DataRow> solutionRows = solutionSource.FilteredRows;
-        List<DataRow> answerRows = answerSource.FilteredRows;
-        int sharedCount = _sharedColumns.Count;
-
         for (int s = 0; s < solutionRows.Count; s++)
         {
             DataRow sol = solutionRows[s];
             string key = MakeKey(sol.Ticker, sol.Year);
-            if (!_answerKeyToIndex.TryGetValue(key, out int aIdx)) continue;
-            DataRow ans = answerRows[aIdx];
-
             float[] values = new float[sharedCount];
-            for (int c = 0; c < sharedCount; c++)
+
+            if (_answerKeyToIndex.TryGetValue(key, out int aIdx))
             {
-                float solVal = sol.NumericValues[_solutionColMap[c]];
-                float ansVal = ans.NumericValues[_answerColMap[c]];
-                float diff = solVal - ansVal;
-                values[c] = useSignedDifference ? diff : Mathf.Abs(diff);
+                DataRow ans = answerRows[aIdx];
+                for (int c = 0; c < sharedCount; c++)
+                {
+                    float range = _jointMax[c] - _jointMin[c];
+                    float solN = range > 0f ? (sol.NumericValues[_solutionColMap[c]] - _jointMin[c]) / range : 0f;
+                    float ansN = range > 0f ? (ans.NumericValues[_answerColMap[c]] - _jointMin[c]) / range : 0f;
+                    float diff = solN - ansN;
+                    values[c] = useSignedDifference ? diff : Mathf.Abs(diff);
+                }
+            }
+            else
+            {
+                for (int c = 0; c < sharedCount; c++)
+                    values[c] = MissingRowError;
             }
 
             _allRows.Add(new DataRow
@@ -105,9 +119,50 @@ public class ErrorDataSource : SurfaceDataSource
         }
 
         RebuildFilter();
-        Debug.Log($"[ErrorDataSource:{name}] Built diff with {_allRows.Count} rows, {_numericColumnNames.Count} columns.");
+        Debug.Log($"[ErrorDataSource:{name}] Built diff: {_allRows.Count} rows, {_numericColumnNames.Count} formula columns.");
         if (!_isLoaded) RaiseDataLoaded();
         else RaiseFilterChanged();
+    }
+
+    private void ComputeJointRanges(List<DataRow> solutionRows, List<DataRow> answerRows, int sharedCount)
+    {
+        if (_jointMin == null || _jointMin.Length != sharedCount) _jointMin = new float[sharedCount];
+        if (_jointMax == null || _jointMax.Length != sharedCount) _jointMax = new float[sharedCount];
+
+        for (int c = 0; c < sharedCount; c++)
+        {
+            _jointMin[c] = float.MaxValue;
+            _jointMax[c] = float.MinValue;
+        }
+
+        for (int r = 0; r < solutionRows.Count; r++)
+        {
+            float[] v = solutionRows[r].NumericValues;
+            for (int c = 0; c < sharedCount; c++)
+            {
+                float x = v[_solutionColMap[c]];
+                if (!float.IsFinite(x)) continue;
+                if (x < _jointMin[c]) _jointMin[c] = x;
+                if (x > _jointMax[c]) _jointMax[c] = x;
+            }
+        }
+        for (int r = 0; r < answerRows.Count; r++)
+        {
+            float[] v = answerRows[r].NumericValues;
+            for (int c = 0; c < sharedCount; c++)
+            {
+                float x = v[_answerColMap[c]];
+                if (!float.IsFinite(x)) continue;
+                if (x < _jointMin[c]) _jointMin[c] = x;
+                if (x > _jointMax[c]) _jointMax[c] = x;
+            }
+        }
+
+        for (int c = 0; c < sharedCount; c++)
+        {
+            if (_jointMin[c] == float.MaxValue) { _jointMin[c] = 0f; _jointMax[c] = 1f; }
+            else if (_jointMax[c] <= _jointMin[c]) _jointMax[c] = _jointMin[c] + 1f;
+        }
     }
 
     private void RefreshColumnSchemaIfNeeded()
@@ -131,10 +186,12 @@ public class ErrorDataSource : SurfaceDataSource
             _solutionColIndex[solCols[i]] = i;
 
         _sharedColumns.Clear();
-        for (int i = 0; i < solCols.Count; i++)
+        string[] formulaCols = FormulaCalculator.FormulaColumns;
+        for (int i = 0; i < formulaCols.Length; i++)
         {
-            if (_answerColIndex.ContainsKey(solCols[i]))
-                _sharedColumns.Add(solCols[i]);
+            string col = formulaCols[i];
+            if (_solutionColIndex.ContainsKey(col) && _answerColIndex.ContainsKey(col))
+                _sharedColumns.Add(col);
         }
 
         _numericColumnNames.Clear();
