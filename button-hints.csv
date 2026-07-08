@@ -1,0 +1,28 @@
+Location,Button,Current Title,Current Body,New Title,New Body,Edit At,Notes
+Wrist menu,Data Panel,Data Panel,"Open the data panel to pick which columns and rows to show, and sort them.",,,Watch.cs:92,
+Wrist menu,Tool Panel,Tool Panel,"Open the tool panel to inspect, compare, slice, color, and grab the sheet.",,,Watch.cs:104,
+Wrist menu,Assistant,Assistant,Toggle the voice assistant on or off.,,,Watch.cs:119,
+Tool Panel - rail,Inspect,Inspect,Hover a cell to read its value. Pinch and drag to read a sheet.,,,ToolPanelConstants.cs:19,
+Tool Panel - rail,Compare,Compare,"Pinch to add a cell, or pinch-drag to add a sheet, then compare them.",,,ToolPanelConstants.cs:21,
+Tool Panel - rail,Slice,Slice,"Cut a sheet into two along a gridline, with a gap between the halves.",,,ToolPanelConstants.cs:23,
+Tool Panel - rail,Color,Color,Fill a sheet with a flat color of your choice.,,,ToolPanelConstants.cs:25,
+Tool Panel - rail,Grab,Grab,Grab and move the sheet freely. Slice it first to move the pieces independently.,,,ToolPanelConstants.cs:27,
+Tool Panel - chrome,Undo,Undo,Undo this tool's last change to the sheet.,,,ToolPanelUI.cs:210,Per tool except Inspect
+Tool Panel - chrome,Reset All,Reset All,Undo every tool and restore the sheet to its original state.,,,ToolPanelUI.cs:242,Title bar
+Tool Panel - Inspect,Inspect Columns,Inspect Columns,Read combined stats for a whole column at once.,,,InspectTool.cs:383,
+Tool Panel - Inspect,Inspect Rows,Inspect Rows,Read combined stats for a whole row at once.,,,InspectTool.cs:385,
+Tool Panel - Compare,Compare Cells,Compare Cells,Collect individual cells to compare. Pinch a cell to add it.,,,CompareTool.cs:504,
+Tool Panel - Compare,Compare Sheets,Compare Sheets,Collect whole sheets to compare. Pinch-drag a sheet to add it.,,,CompareTool.cs:506,
+Tool Panel - Slice,Slice Columns,Slice Columns,Cut the sheet along a vertical gridline between columns.,,,SliceTool.cs:392,
+Tool Panel - Slice,Slice Rows,Slice Rows,Cut the sheet along a horizontal gridline between rows.,,,SliceTool.cs:394,
+Tool Panel - Color,Color swatches,,No hint attached,,,ColorTool.cs:198,Needs a HintTrigger added
+Data Panel,Dataset chips,(dataset name),Switch to this dataset's columns and rows.,,,DataPanelUI.cs:224,One per loaded dataset
+Data Panel,Columns window tab,Columns,Switch to the Columns list to toggle which are shown and sort them.,,,DataPanelUI.cs:345,Templated (same line as Rows)
+Data Panel,Rows window tab,Rows,Switch to the Rows list to toggle which are shown and sort them.,,,DataPanelUI.cs:345,Templated (same line as Columns)
+Data Panel,Select All,Select All,Show every {column/row} in the sheet.,,,DataPanelUI.cs:407,Per window
+Data Panel,Deselect All,Deselect All,Hide every {column/row} in the sheet.,,,DataPanelUI.cs:416,Per window
+Data Panel,Sort Ascending,Sort Ascending,"Sort the {columns/rows} by value, lowest to highest.",,,DataPanelUI.cs:556,Per window
+Data Panel,Sort Descending,Sort Descending,"Sort the {columns/rows} by value, highest to lowest.",,,DataPanelUI.cs:556,Per window
+Data Panel,Reset All,Reset All,Show all columns and rows and clear any sorting.,,,DataPanelUI.cs:637,Title bar
+Data Panel,Toggle cards - Columns,Toggle Column,Show or hide this column in the sheet.,,,DataPanelUI.cs:752,Shared-latch per tab
+Data Panel,Toggle cards - Rows,Toggle Row,Show or hide this row in the sheet.,,,DataPanelUI.cs:752,Shared-latch per tab

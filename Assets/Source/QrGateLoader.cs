@@ -5,10 +5,7 @@ using UnityEngine.SceneManagement;
 public class QrGateLoader : MonoBehaviour
 {
     [SerializeField] string nextScene = "Main";
-    [SerializeField] string expectedPayload = "";
     bool loaded;
-
-    public static string LastPayload;
 
     void Start()
     {
@@ -26,13 +23,9 @@ public class QrGateLoader : MonoBehaviour
         if (loaded) return;
         if (trackable.TrackableType != OVRAnchor.TrackableType.QRCode) return;
 
-        var payload = trackable.MarkerPayloadString;
-        if (string.IsNullOrEmpty(payload)) return;
-        if (!string.IsNullOrEmpty(expectedPayload) && payload != expectedPayload) return;
-
-        LastPayload = payload;
+        DataRequest.Pending = trackable.MarkerPayloadString;
         loaded = true;
-        Debug.Log($"[QrGateLoader] QR payload '{payload}' → loading {nextScene}");
+        Debug.Log($"[QrGateLoader] QR detected → loading {nextScene}");
         SceneManager.LoadScene(nextScene, LoadSceneMode.Single);
     }
 }

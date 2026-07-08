@@ -11,13 +11,44 @@ public abstract class ToolTemplate {
     public abstract FunctionDeclaration Declaration { get; }
     protected abstract Task<Dictionary<string, object>> Execute(Dictionary<string, object> args);
 
+    public virtual bool IsAvailable() => true;
+
     public static async Task Run(AsyncSession session, FunctionCall call) {
         if (!registry.TryGetValue(call.Name, out var tool)) {
             Debug.LogWarning($"[ToolTemplate] Unknown tool: {call.Name}");
             return;
         }
-        var result = await tool.Execute(call.Args);
-        await session.SendToolResponseAsync(new LiveSendToolResponseParameters {
+
+        Dictionary<string, object> result;
+        try {
+            result = await tool.Execute(call.Args).ConfigureAwait(false);
+        }
+        catch (Exception e) {
+            Debug.LogError($"[ToolTemplate] {call.Name} failed: {e}");
+            result = new Dictionary<string, object> { { "error", e.Message } };
+        }
+
+        Sanitize(result);
+
+        try {
+            await Respond(session, call, result).ConfigureAwait(false);
+        }
+        catch (Exception e) {
+            Debug.LogError($"[ToolTemplate] SendToolResponse failed: {e}");
+            try {
+                await Respond(session, call, new Dictionary<string, object> {
+                    { "error", "The tool result could not be delivered. The action may still have applied; " +
+                               "verify with GetSheetInfo before retrying." }
+                }).ConfigureAwait(false);
+            }
+            catch (Exception e2) {
+                Debug.LogError($"[ToolTemplate] SendToolResponse fallback failed: {e2}");
+            }
+        }
+    }
+
+    private static Task Respond(AsyncSession session, FunctionCall call, Dictionary<string, object> result) {
+        return session.SendToolResponseAsync(new LiveSendToolResponseParameters {
             FunctionResponses = new List<FunctionResponse> {
                 new FunctionResponse {
                     Id = call.Id,
@@ -26,6 +57,20 @@ public abstract class ToolTemplate {
                 }
             }
         });
+    }
+
+    private static object Sanitize(object value) {
+        switch (value) {
+            case double d when double.IsNaN(d) || double.IsInfinity(d): return null;
+            case float f when float.IsNaN(f) || float.IsInfinity(f): return null;
+            case Dictionary<string, object> dict:
+                foreach (var key in dict.Keys.ToList()) dict[key] = Sanitize(dict[key]);
+                return dict;
+            case List<object> list:
+                for (int i = 0; i < list.Count; i++) list[i] = Sanitize(list[i]);
+                return list;
+            default: return value;
+        }
     }
 
     static Dictionary<string, ToolTemplate> registry;

@@ -106,7 +106,7 @@ MonoBehaviour:
     - line: '|   androidApplicationEntry: 2'
     - line: '|   defaultIsNativeResolution: 1'
     - line: '|   macRetinaSupport: 1'
-    - line: '|   runInBackground: 0'
+    - line: '|   runInBackground: 1'
     - line: '|   muteOtherAudioSources: 0'
     - line: '|   Prepare IOS For Recording: 0'
     - line: '|   Force IOS Speakers When Recording: 0'
@@ -173,10 +173,6 @@ MonoBehaviour:
         2}'
     - line: '|   - {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b,
         type: 3}'
-    - line: '|   - {fileID: -5092608056009428384, guid: 83c0108a1349362468a1a8135bf3638e,
-        type: 2}'
-    - line: '|   - {fileID: -9076816226767289751, guid: edb9e767e9f847b488581a0d22b83b6a,
-        type: 2}'
     - line: '|   metroInputSource: 0'
     - line: '|   wsaTransparentSwapchain: 0'
     - line: '|   xboxOneDisableKinectGpuReservation: 1'
@@ -866,9 +862,9 @@ MonoBehaviour:
     - line: '|   webWasm2023: 0'
     - line: '|   webEnableSubmoduleStrippingCompatibility: 0'
     - line: '|   scriptingDefineSymbols:'
-    - line: '|     Android: OVR_DISABLE_HAND_PINCH_BUTTON_MAPPING;USE_INPUT_SYSTEM_POSE_CONTROL'
-    - line: '|     Standalone: OVR_DISABLE_HAND_PINCH_BUTTON_MAPPING;USE_INPUT_SYSTEM_POSE_CONTROL'
-    - line: '|     Windows Store Apps: USE_INPUT_SYSTEM_POSE_CONTROL'
+    - line: '|     Android: OVR_DISABLE_HAND_PINCH_BUTTON_MAPPING;USE_INPUT_SYSTEM_POSE_CONTROL;USE_STICK_CONTROL_THUMBSTICKS'
+    - line: '|     Standalone: OVR_DISABLE_HAND_PINCH_BUTTON_MAPPING;USE_INPUT_SYSTEM_POSE_CONTROL;USE_STICK_CONTROL_THUMBSTICKS'
+    - line: '|     Windows Store Apps: USE_INPUT_SYSTEM_POSE_CONTROL;USE_STICK_CONTROL_THUMBSTICKS'
     - line: '|   additionalCompilerArguments: {}'
     - line: '|   platformArchitecture: {}'
     - line: '|   scriptingBackend:'
@@ -971,11 +967,11 @@ MonoBehaviour:
     - line: '|   captureStartupLogs: {}'
     - line: '|   activeInputHandler: 1'
     - line: '|   windowsGamepadBackendHint: 0'
-    - line: '|   cloudProjectId: '
+    - line: '|   cloudProjectId: d6572137-611e-423c-9d43-d278111cca8e'
     - line: '|   framebufferDepthMemorylessMode: 0'
     - line: '|   qualitySettingsNames: []'
-    - line: '|   projectName: '
-    - line: '|   organizationId: '
+    - line: '|   projectName: Nasba'
+    - line: '|   organizationId: enzonunezmqi9k3u5'
     - line: '|   cloudEnabled: 0'
     - line: '|   legacyClampBlendShapeWeights: 0'
     - line: '|   hmiLoadingImage: {instanceID: 0}'
@@ -995,7 +991,7 @@ MonoBehaviour:
       type: {class: AndroidPlatformBuildSettings, ns: UnityEditor.Android, asm: UnityEditor.Android.Extensions}
       data:
         m_Development: 1
-        m_ConnectProfiler: 0
+        m_ConnectProfiler: 1
         m_BuildWithDeepProfilingSupport: 0
         m_AllowDebugging: 0
         m_WaitForManagedDebugger: 0
@@ -1013,7 +1009,7 @@ MonoBehaviour:
         m_ExportAsGoogleAndroidProject: 0
         m_DebugSymbolLevel: 1
         m_DebugSymbolFormat: 5
-        m_CurrentDeploymentTargetId: 2G97C5ZH4Y00GX
+        m_CurrentDeploymentTargetId: __builtin__target_default
         m_BuildType: 1
         m_LinkTimeOptimization: 0
         m_BuildAppBundle: 0
