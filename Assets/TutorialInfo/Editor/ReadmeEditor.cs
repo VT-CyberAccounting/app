@@ -41,11 +41,11 @@ sealed class ReadmeEditor : Editor
         Selection.objects = new UnityEngine.Object[] { readmeObject };
         return (Readme)readmeObject;
     }
-    
+
     void RemoveTutorial()
     {
         if (EditorUtility.DisplayDialog("Remove Readme Assets",
-            
+
             $"All contents under {k_ReadmeSourceDirectory} will be removed, are you sure you want to proceed?",
             "Proceed",
             "Cancel"))
@@ -72,7 +72,6 @@ sealed class ReadmeEditor : Editor
         }
     }
 
-    //Remove ImGUI
     protected sealed override void OnHeaderGUI() { }
     public sealed override void OnInspectorGUI() { }
 
@@ -90,14 +89,12 @@ sealed class ReadmeEditor : Editor
             return created;
         }
 
-        //Header
         VisualElement title = new();
         title.AddToClassList("title");
         title.Add(ChainWithClass(new Image() { image = readme.icon }, "title__icon"));
         title.Add(ChainWithClass(new Label(readme.title), "title__text"));
         root.Add(title);
 
-        //Content
         foreach (var section in readme.sections)
         {
             VisualElement part = new();
